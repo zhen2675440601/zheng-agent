@@ -5,11 +5,21 @@ from zheng_agent.core.contracts import (
     ActionRequest,
     ActionResult,
     AgentDecision,
+    DecisionType,
     EvalResult,
     RunContext,
     RunResult,
     TaskSpec,
 )
+
+
+def test_contract_package_exports_decision_type():
+    assert DecisionType.__args__ == (
+        "request_action",
+        "respond",
+        "complete",
+        "fail",
+    )
 
 
 def test_task_spec_accepts_minimum_fields():
