@@ -29,15 +29,18 @@ No blocking, formatting, test, or command-running hooks are configured yet.
 
 ## Common commands
 
-There are no build, lint, test, or run commands yet because the project has not been initialized.
+Initialize environment:
+- `python -m pip install -e .[dev]`
 
-If you initialize the project, update this file with the exact commands for:
-- dependency installation
-- running the CLI locally
-- running the web UI locally
-- running unit tests
-- running a single test
-- linting and formatting
+Run unit tests:
+- `pytest -q`
+
+Run a single test:
+- `pytest tests/runtime/test_engine.py::test_engine_completes_run_with_action -q`
+
+There is no local CLI or web UI yet.
+
+Current concrete package layout starts under `src/zheng_agent/core/`.
 
 ## Architecture overview
 
