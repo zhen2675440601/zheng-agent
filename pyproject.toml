@@ -10,12 +10,20 @@ readme = "CLAUDE.md"
 requires-python = ">=3.12"
 dependencies = [
   "pydantic>=2.7,<3.0",
+  "click>=8.0,<9.0",
+  "pyyaml>=6.0,<7.0",
 ]
 
 [project.optional-dependencies]
 dev = [
   "pytest>=8.0,<9.0",
 ]
+openai = [
+  "openai>=1.0,<2.0",
+]
+
+[project.scripts]
+zheng-agent = "zheng_agent.cli.main:cli"
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]

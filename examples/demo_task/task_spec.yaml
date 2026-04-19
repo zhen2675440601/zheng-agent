@@ -1,0 +1,23 @@
+task_type: echo_demo
+title: Echo 演示任务
+description: 一个简单的 echo 任务，用于演示系统工作流程
+input_schema:
+  type: object
+  properties:
+    message:
+      type: string
+      description: 要回显的消息
+  required:
+    - message
+output_schema:
+  type: object
+  required_keys:
+    - message
+allowed_actions:
+  - echo
+  - log
+constraints: {}
+success_criteria:
+  - 返回的消息与输入一致
+max_steps: 5
+timeout_seconds: 300
