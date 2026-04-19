@@ -1,2 +1,15 @@
 .claude/settings.local.json
 .worktrees/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Project specific
+traces/
+test_traces/
