@@ -96,10 +96,12 @@ class HarnessEngine:
                 if action_result.status == "rejected":
                     emit("action_rejected", {"error": action_result.error}, step_id=step_id)
                     step_status = apply_step_event(step_status, "action_rejected")
+                    emit("step_failed", {"step_id": step_id, "reason": "action_rejected"}, step_id=step_id)
                     run_status = apply_run_event(run_status, "action_rejected")
                 else:
                     emit("action_failed", {"error": action_result.error}, step_id=step_id)
                     step_status = apply_step_event(step_status, "action_failed")
+                    emit("step_failed", {"step_id": step_id, "reason": "action_failed"}, step_id=step_id)
                     run_status = apply_run_event(run_status, "action_failed")
 
                 run_result = RunResult(
@@ -131,6 +133,7 @@ class HarnessEngine:
                 return EngineOutcome(run_id=run_id, run_result=run_result, eval_result=eval_result)
 
             if decision.decision_type == "fail":
+                emit("step_failed", {"step_id": step_id, "reason": decision.failure_reason}, step_id=step_id)
                 step_status = apply_step_event(step_status, "decision_fail")
                 run_status = apply_run_event(run_status, "run_failed")
                 emit("run_failed", {"error": decision.failure_reason})

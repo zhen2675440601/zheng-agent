@@ -1,7 +1,7 @@
 import click
 from pathlib import Path
 
-from zheng_agent.cli.config.loader import load_task_spec, load_task_input
+from zheng_agent.cli.config.loader import load_and_validate_task_input, load_task_spec, ValidationError
 from zheng_agent.core.runtime.engine import HarnessEngine
 from zheng_agent.core.action_gateway import ActionAdapterRegistry, ActionGatewayExecutor
 from zheng_agent.core.evaluation.validators import BasicRunEvaluator
@@ -25,7 +25,11 @@ def run(task_spec: str, task_input: str, agent: str, trace_dir: str, output_form
     """Run a task with specified agent."""
     # 加载配置
     spec = load_task_spec(Path(task_spec))
-    input_data = load_task_input(Path(task_input))
+    try:
+        input_data = load_and_validate_task_input(spec, Path(task_input))
+    except ValidationError as e:
+        click.echo(f"Error: {e}", err=True)
+        raise SystemExit(1)
 
     # 构建 action registry (内置 echo 动作)
     registry = ActionAdapterRegistry()

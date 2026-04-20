@@ -27,4 +27,4 @@ def test_basic_evaluator_fails_when_required_keys_missing():
 
     assert isinstance(evaluation, EvalResult)
     assert evaluation.passed is False
-    assert "missing_output_keys" in evaluation.reasons
+    assert any("message" in reason for reason in evaluation.reasons)

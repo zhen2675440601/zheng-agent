@@ -1,4 +1,4 @@
-from zheng_agent.core.contracts import EvalResult, RunResult, TaskSpec
+from zheng_agent.core.contracts import EvalResult, RunResult, TaskSpec, validate_output
 from zheng_agent.core.tracing.events import TraceEvent
 
 
@@ -9,14 +9,12 @@ class BasicRunEvaluator:
         trace: list[TraceEvent],
         final_result: RunResult,
     ) -> EvalResult:
-        required_keys = task_spec.output_schema.get("required_keys", [])
-        output = final_result.output or {}
-        missing_keys = [key for key in required_keys if key not in output]
+        output_valid, output_errors = validate_output(task_spec.output_schema, final_result.output)
         rejected_actions = [event for event in trace if event.event_type == "action_rejected"]
 
         reasons: list[str] = []
-        if missing_keys:
-            reasons.append("missing_output_keys")
+        if not output_valid:
+            reasons.extend(output_errors)
         if rejected_actions:
             reasons.append("rejected_action_present")
 

@@ -8,6 +8,37 @@ from zheng_agent.core.runtime.engine import HarnessEngine
 from zheng_agent.core.tracing.reader import read_trace_events
 
 
+def test_engine_emits_step_failed_on_action_rejected(tmp_path: Path):
+    registry = ActionAdapterRegistry()
+    gateway = ActionGatewayExecutor(registry)  # 没有 adapter，任何 action 都会失败
+    agent = ScriptedMockAgent(
+        decisions=[
+            AgentDecision(
+                decision_type="request_action",
+                action_name="unknown_action",
+                action_input={},
+            ),
+        ]
+    )
+    evaluator = BasicRunEvaluator()
+    engine = HarnessEngine(trace_root=tmp_path, gateway=gateway, evaluator=evaluator)
+
+    spec = TaskSpec(
+        task_type="demo",
+        title="演示任务",
+        description="最小任务",
+        input_schema={"type": "object"},
+        output_schema={"type": "object"},
+        allowed_actions=["unknown_action"],  # 允许但没有注册 adapter
+    )
+
+    outcome = engine.run(task_spec=spec, task_input={}, agent=agent)
+    events = read_trace_events(tmp_path / f"{outcome.run_id}.jsonl")
+
+    assert outcome.run_result.status == "failed"
+    assert "step_failed" in [event.event_type for event in events]
+
+
 def test_engine_completes_run_with_action(tmp_path: Path):
     registry = ActionAdapterRegistry()
     registry.register("echo", lambda payload: {"message": payload["message"]})
