@@ -17,6 +17,7 @@ def test_contract_package_exports_decision_type():
     assert DecisionType.__args__ == (
         "request_action",
         "respond",
+        "advance_step",
         "complete",
         "fail",
     )

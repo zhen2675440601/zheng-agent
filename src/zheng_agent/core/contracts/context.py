@@ -9,3 +9,4 @@ class RunContext(BaseModel):
     task_input: dict
     visible_trace: list[dict] = Field(default_factory=list)
     step_index: int = 0
+    action_count: int = 0

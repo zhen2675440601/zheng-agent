@@ -4,8 +4,7 @@ from uuid import uuid4
 
 from zheng_agent.core.action_gateway import ActionGatewayExecutor
 from zheng_agent.core.agent.base import AgentProtocol
-from zheng_agent.core.contracts import ActionRequest, RunContext, RunResult, TaskSpec
-from zheng_agent.core.contracts.recovery import AgentRecoveryMetadata
+from zheng_agent.core.contracts import ActionRequest, AgentDecision, RunContext, RunResult, TaskSpec
 from zheng_agent.core.evaluation.base import RunEvaluator
 from zheng_agent.core.runtime.state_store import RunState, RunStateStore
 from zheng_agent.core.state_machine import apply_run_event, apply_step_event
@@ -40,6 +39,10 @@ class HarnessEngine:
         signal_path = self._pause_signal_path(run_id)
         if signal_path.exists():
             signal_path.unlink()
+
+    def _make_step_id(self, step_index: int) -> str:
+        """Generate step ID from step index."""
+        return f"step-{step_index + 1}"
 
     def _save_checkpoint(
         self,
@@ -92,6 +95,7 @@ class HarnessEngine:
             run_id = str(uuid4())
 
         trace_store = JsonlTraceStore(self.trace_root / f"{run_id}.jsonl")
+        trace_path = self.trace_root / f"{run_id}.jsonl"
 
         # Initialize or restore state
         if initial_state:
@@ -123,6 +127,29 @@ class HarnessEngine:
                 )
             )
 
+        def start_new_step() -> str:
+            """Start a new step and return its ID."""
+            nonlocal step_index, step_status, step_id
+            step_id = self._make_step_id(step_index)
+            step_status = apply_step_event("pending", "step_scheduled")
+            emit("step_scheduled", {"step_id": step_id, "step_index": step_index}, step_id=step_id)
+            step_status = apply_step_event(step_status, "step_started")
+            emit("step_started", {"step_id": step_id, "step_index": step_index}, step_id=step_id)
+            self._save_checkpoint(
+                run_id, run_status, step_id, step_status, step_index, sequence,
+                task_spec, task_input, agent, "step_boundary", "step_started"
+            )
+            return step_id
+
+        def advance_to_next_step() -> str:
+            """Complete current step and advance to next step."""
+            nonlocal step_index, step_status, step_id
+            # Complete current step
+            emit("step_completed", {"step_id": step_id, "step_index": step_index}, step_id=step_id)
+            step_index += 1
+            # Start new step
+            return start_new_step()
+
         # Start phase (if not resuming from paused)
         if run_status == "created":
             emit("run_created", {"task_type": task_spec.task_type})
@@ -136,34 +163,27 @@ class HarnessEngine:
         if run_status == "paused":
             self._clear_pause_signal(run_id)
             run_status = apply_run_event(run_status, "resume_requested")
-            emit("run_resumed", {})
+            emit("run_resumed", {"from_step": step_id, "from_step_index": step_index})
 
-        # Step phase
+        # Step phase - start first step if needed
         if step_id is None:
-            step_id = "step-1"
-            step_status = apply_step_event(step_status, "step_scheduled")
-            emit("step_scheduled", {"step_id": step_id}, step_id=step_id)
-            step_status = apply_step_event(step_status, "step_started")
-            emit("step_started", {"step_id": step_id}, step_id=step_id)
-            # Save checkpoint at step start
-            self._save_checkpoint(
-                run_id, run_status, step_id, step_status, step_index, sequence,
-                task_spec, task_input, agent, "step_boundary", "step_started"
-            )
+            start_new_step()
 
         run_context = RunContext(run_id=run_id, task_spec=task_spec, task_input=task_input)
         run_context.visible_trace = [
             event.model_dump(mode="json")
-            for event in read_trace_events(self.trace_root / f"{run_id}.jsonl")
+            for event in read_trace_events(trace_path)
         ]
+        run_context.step_index = step_index
 
+        # Main execution loop
         while True:
             # Check for pause request (in-process or cross-process)
             if self._pause_requested or self._check_pause_signal(run_id):
                 self._pause_requested = False
-                self._clear_pause_signal(run_id)  # Clear signal file after detecting
+                self._clear_pause_signal(run_id)
                 run_status = apply_run_event(run_status, "pause_requested")
-                emit("run_paused", {"step_id": step_id, "checkpoint_kind": "pause"})
+                emit("run_paused", {"step_id": step_id, "step_index": step_index, "checkpoint_kind": "pause"})
                 self._save_checkpoint(
                     run_id, run_status, step_id, step_status, step_index, sequence,
                     task_spec, task_input, agent, "pause", "user_requested"
@@ -175,13 +195,15 @@ class HarnessEngine:
                 )
                 return EngineOutcome(run_id=run_id, run_result=run_result, eval_result=None)
 
+            # Agent decision
             decision = agent.decide(task_spec, run_context)
             emit(
                 "agent_decision_produced",
-                {"decision_type": decision.decision_type},
+                {"decision_type": decision.decision_type, "step_id": step_id},
                 step_id=step_id,
             )
 
+            # Handle decision types
             if decision.decision_type == "request_action":
                 step_status = apply_step_event(step_status, "decision_request_action")
                 run_status = apply_run_event(run_status, "action_requested")
@@ -212,22 +234,24 @@ class HarnessEngine:
                         run_id, run_status, step_id, step_status, step_index, sequence,
                         task_spec, task_input, agent, "action_after", f"action:{decision.action_name}"
                     )
+                    # Update context for next decision
                     run_context.visible_trace = [
                         event.model_dump(mode="json")
-                        for event in read_trace_events(self.trace_root / f"{run_id}.jsonl")
+                        for event in read_trace_events(trace_path)
                     ]
-                    run_context.step_index += 1
+                    run_context.action_count += 1
                     continue
 
+                # Action failed or rejected - step fails, run fails
                 if action_result.status == "rejected":
                     emit("action_rejected", {"error": action_result.error}, step_id=step_id)
                     step_status = apply_step_event(step_status, "action_rejected")
-                    emit("step_failed", {"step_id": step_id, "reason": "action_rejected"}, step_id=step_id)
+                    emit("step_failed", {"step_id": step_id, "step_index": step_index, "reason": "action_rejected"}, step_id=step_id)
                     run_status = apply_run_event(run_status, "action_rejected")
                 else:
                     emit("action_failed", {"error": action_result.error}, step_id=step_id)
                     step_status = apply_step_event(step_status, "action_failed")
-                    emit("step_failed", {"step_id": step_id, "reason": "action_failed"}, step_id=step_id)
+                    emit("step_failed", {"step_id": step_id, "step_index": step_index, "reason": "action_failed"}, step_id=step_id)
                     run_status = apply_run_event(run_status, "action_failed")
 
                 run_result = RunResult(
@@ -236,7 +260,7 @@ class HarnessEngine:
                     status="failed",
                     error=action_result.error,
                 )
-                trace = read_trace_events(self.trace_root / f"{run_id}.jsonl")
+                trace = read_trace_events(trace_path)
                 eval_result = self.evaluator.evaluate(task_spec, trace, run_result)
                 emit("run_failed", {"error": action_result.error})
                 emit("evaluation_completed", {
@@ -248,9 +272,32 @@ class HarnessEngine:
                 self._state_store.delete(run_id)
                 return EngineOutcome(run_id=run_id, run_result=run_result, eval_result=eval_result)
 
+            if decision.decision_type == "respond":
+                # Agent produces intermediate response, continues execution
+                emit("agent_response", {"response": decision.response, "step_id": step_id}, step_id=step_id)
+                # Update context with response info
+                run_context.visible_trace = [
+                    event.model_dump(mode="json")
+                    for event in read_trace_events(trace_path)
+                ]
+                # Optionally advance to next step after respond
+                # (depends on task semantics - for now, just continue in same step)
+                continue
+
+            if decision.decision_type == "advance_step":
+                # Agent explicitly requests to advance to next step
+                emit("step_advance_requested", {"step_id": step_id, "step_index": step_index}, step_id=step_id)
+                step_id = advance_to_next_step()
+                run_context.step_index = step_index
+                run_context.visible_trace = [
+                    event.model_dump(mode="json")
+                    for event in read_trace_events(trace_path)
+                ]
+                continue
+
             if decision.decision_type == "complete":
                 step_status = apply_step_event(step_status, "decision_complete")
-                emit("step_completed", {"step_id": step_id}, step_id=step_id)
+                emit("step_completed", {"step_id": step_id, "step_index": step_index}, step_id=step_id)
                 run_status = apply_run_event(run_status, "run_succeeded")
                 run_result = RunResult(
                     run_id=run_id,
@@ -258,8 +305,8 @@ class HarnessEngine:
                     status="completed",
                     output=decision.final_result,
                 )
-                emit("run_completed", {"status": run_status, "output": decision.final_result})
-                trace = read_trace_events(self.trace_root / f"{run_id}.jsonl")
+                emit("run_completed", {"status": run_status, "output": decision.final_result, "total_steps": step_index + 1})
+                trace = read_trace_events(trace_path)
                 eval_result = self.evaluator.evaluate(task_spec, trace, run_result)
                 emit("evaluation_completed", {
                     "passed": eval_result.passed,
@@ -271,7 +318,7 @@ class HarnessEngine:
                 return EngineOutcome(run_id=run_id, run_result=run_result, eval_result=eval_result)
 
             if decision.decision_type == "fail":
-                emit("step_failed", {"step_id": step_id, "reason": decision.failure_reason}, step_id=step_id)
+                emit("step_failed", {"step_id": step_id, "step_index": step_index, "reason": decision.failure_reason}, step_id=step_id)
                 step_status = apply_step_event(step_status, "decision_fail")
                 run_status = apply_run_event(run_status, "run_failed")
                 emit("run_failed", {"error": decision.failure_reason})
@@ -281,7 +328,7 @@ class HarnessEngine:
                     status="failed",
                     error=decision.failure_reason,
                 )
-                trace = read_trace_events(self.trace_root / f"{run_id}.jsonl")
+                trace = read_trace_events(trace_path)
                 eval_result = self.evaluator.evaluate(task_spec, trace, run_result)
                 emit("evaluation_completed", {
                     "passed": eval_result.passed,

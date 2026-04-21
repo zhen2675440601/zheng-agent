@@ -2,7 +2,7 @@ from typing import Literal
 
 from pydantic import BaseModel, model_validator
 
-DecisionType = Literal["request_action", "respond", "complete", "fail"]
+DecisionType = Literal["request_action", "respond", "advance_step", "complete", "fail"]
 
 
 class AgentDecision(BaseModel):
@@ -20,6 +20,8 @@ class AgentDecision(BaseModel):
             self.action_name is None or self.action_input is None
         ):
             raise ValueError("request_action requires action_name and action_input")
+        if self.decision_type == "respond" and self.response is None:
+            raise ValueError("respond requires response")
         if self.decision_type == "complete" and self.final_result is None:
             raise ValueError("complete requires final_result")
         if self.decision_type == "fail" and self.failure_reason is None:
