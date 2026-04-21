@@ -4,18 +4,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repository status
 
-**v0.1 已完成**。核心模块已实现并通过验收标准验证。
+**v0.2 已完成**。工程化闭环已实现，支持 pause/resume、replay、复验链路。
 
 已完成模块：
 - contracts (TaskSpec, AgentDecision, ActionRequest/Result, RunResult, EvalResult)
 - state_machine (Run/Step 状态迁移表)
-- runtime/engine (HarnessEngine 执行引擎)
+- runtime/engine (HarnessEngine 执行引擎 + pause/resume)
+- runtime/state_store (RunState 持久化)
 - action_gateway (executor, registry, policy)
 - tracing (JsonlTraceStore, events)
 - evaluation (BasicRunEvaluator)
-- replay (基础 replayer)
-- agent (base protocol, mock agent, OpenAI adapter)
-- CLI (run 命令)
+- replay (replayer + reevaluate_trace + compare)
+- agent (base protocol, mock agent, OpenAI adapter, ChatAgent)
+- CLI (run, chat, pause, resume, replay 命令)
 
 设计文档仍在 `docs/specs/`，作为架构基线参考。
 
@@ -28,6 +29,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 5. 不同 agent adapter 可替换运行 ✅
 6. 非法 action/状态迁移会被 harness 拦截 ✅
 
+## v0.2 新增能力
+
+- **pause/resume**: 运行中暂停、恢复执行
+- **replay CLI**: 查看历史 trace、重新评估
+- **复验链路**: trace → replay → evaluator 结果一致性验证
+- **chat 命令**: 交互式对话（LLM 或 mock）
+
 ## Repository rules and hooks
 
 Project Claude hooks are defined in `.claude/settings.json`.
@@ -39,26 +47,60 @@ Current project hooks:
 Git ignore rules currently include:
 - `.claude/settings.local.json` is ignored as a machine-local personal override.
 
-## Common commands
+## Quick Start
 
-Initialize environment:
-```
+```bash
+# 安装
+git clone https://github.com/zhen2675440601/zheng-agent.git
+cd zheng-agent
 py -m pip install -e .[dev]
-```
 
-Run unit tests:
-```
+# 运行测试
 py -m pytest -q
-```
 
-Run a single test:
-```
-py -m pytest tests/runtime/test_engine.py::test_engine_completes_run_with_action -q
-```
-
-Run CLI:
-```
+# 运行示例任务
 py -m zheng_agent.cli.main run -t examples/demo_task/task_spec.yaml -i examples/demo_task/task_input.yaml -a mock
+
+# 交互式对话
+py -m zheng_agent.cli.main chat --mock
+```
+
+## CLI Commands
+
+### run - 执行任务
+```bash
+py -m zheng_agent.cli.main run -t <task_spec.yaml> -i <input.yaml> -a mock -d ./traces
+```
+
+### chat - 交互对话
+```bash
+# 使用 mock（测试流程）
+py -m zheng_agent.cli.main chat --mock
+
+# 使用 LLM（需要 OPENAI_API_KEY）
+set OPENAI_API_KEY=sk-xxx
+py -m zheng_agent.cli.main chat
+```
+
+### replay - 分析历史 trace
+```bash
+# 查看摘要
+py -m zheng_agent.cli.main replay <run_id> -d ./traces
+
+# 查看详细事件
+py -m zheng_agent.cli.main replay <run_id> -d ./traces -f events
+
+# 重新评估并对比
+py -m zheng_agent.cli.main replay <run_id> -d ./traces -t task_spec.yaml --re-evaluate --compare
+```
+
+### pause/resume - 暂停恢复
+```bash
+# 创建暂停信号
+py -m zheng_agent.cli.main pause <run_id> -d ./traces
+
+# 恢复执行
+py -m zheng_agent.cli.main resume <run_id> -d ./traces
 ```
 
 ## Package layout
@@ -68,14 +110,26 @@ src/zheng_agent/
   core/
     contracts/       # TaskSpec, AgentDecision, ActionRequest/Result, RunResult
     state_machine/   # 状态迁移表
-    runtime/         # HarnessEngine
+    runtime/
+      engine.py      # HarnessEngine
+      state_store.py # RunState 持久化
     action_gateway/  # executor, registry, policy
     tracing/         # JsonlTraceStore, events
     evaluation/      # BasicRunEvaluator
-    replay/          # replayer
+    replay/          # replayer, reevaluate_trace, compare
     agent/           # AgentProtocol, mock agent
-  agents/llm/        # OpenAI agent adapter
-  cli/               # CLI entry point, run command
+  agents/
+    llm/             # OpenAI agent adapter
+    chat_agent.py    # ChatAgent
+  cli/               # CLI entry point, run/chat/pause/resume/replay
+
+tests/
+  contracts/         # 合约测试
+  state_machine/     # 状态机测试
+  runtime/           # engine + pause/resume 测试
+  replay/            # replay + 复验测试
+  e2e/               # CLI 端到端测试
+```
 
 ## Architecture overview
 
@@ -104,7 +158,7 @@ Two boundaries are first-class:
 - run and step progression go through an explicit state machine
 
 #### Verifiability over convenience
-The v0.1 success criterion is verifiability: runs are inspectable, evaluable, and comparable.
+The success criterion is verifiability: runs are inspectable, evaluable, replayable, and comparable.
 
 ## Key domain objects
 
@@ -112,6 +166,7 @@ The v0.1 success criterion is verifiability: runs are inspectable, evaluable, an
 - `AgentDecision` - agent 结构化决策
 - `ActionRequest/ActionResult` - 受控动作请求与返回
 - `RunResult` - run 最终产物
+- `RunState` - 运行状态持久化（用于 pause/resume）
 - `EvalResult` - 执行验证结果
 
 ## State model
@@ -128,3 +183,5 @@ State transitions are event-driven and explicit via `apply_run_event/apply_step_
 2. Treat Action Gateway mediation as mandatory for external actions
 3. Keep trace and evaluation as first-class runtime outputs
 4. Validate input/output against schemas
+5. Support pause/resume for debugging
+6. Ensure replay → evaluator consistency
