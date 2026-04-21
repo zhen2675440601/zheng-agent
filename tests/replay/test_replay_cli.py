@@ -77,3 +77,44 @@ def test_reevaluate_trace_detects_missing_output(tmp_path: Path):
 
     assert result["passed"] is False
     assert any("message" in reason for reason in result["reasons"])
+
+
+def test_get_original_eval_result_extracts_from_trace(tmp_path: Path):
+    path = tmp_path / "run-5.jsonl"
+    store = JsonlTraceStore(path)
+    store.append(build_trace_event(run_id="run-5", step_id=None, event_type="run_created", payload={}, sequence_number=1))
+    store.append(build_trace_event(run_id="run-5", step_id=None, event_type="evaluation_completed", payload={"passed": True, "score": 1.0, "reasons": [], "metrics": {"trace_events": 5}}, sequence_number=2))
+
+    from zheng_agent.core.replay.replayer import get_original_eval_result
+    original = get_original_eval_result(path)
+
+    assert original is not None
+    assert original["passed"] is True
+    assert original["score"] == 1.0
+    assert original["metrics"]["trace_events"] == 5
+
+
+def test_compare_eval_results_detects_match(tmp_path: Path):
+    from zheng_agent.core.replay.replayer import compare_eval_results
+
+    original = {"passed": True, "score": 1.0, "reasons": [], "metrics": {"events": 10}}
+    reevaluated = {"passed": True, "score": 1.0, "reasons": [], "metrics": {"events": 10}}
+
+    comparison = compare_eval_results(original, reevaluated)
+
+    assert comparison["passed_match"] is True
+    assert comparison["score_match"] is True
+    assert comparison["reasons_match"] is True
+
+
+def test_compare_eval_results_detects_mismatch(tmp_path: Path):
+    from zheng_agent.core.replay.replayer import compare_eval_results
+
+    original = {"passed": True, "score": 1.0, "reasons": []}
+    reevaluated = {"passed": False, "score": 0.0, "reasons": ["missing_output_keys"]}
+
+    comparison = compare_eval_results(original, reevaluated)
+
+    assert comparison["passed_match"] is False
+    assert comparison["score_match"] is False
+    assert comparison["reasons_match"] is False

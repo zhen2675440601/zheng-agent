@@ -180,7 +180,12 @@ class HarnessEngine:
                 trace = read_trace_events(self.trace_root / f"{run_id}.jsonl")
                 eval_result = self.evaluator.evaluate(task_spec, trace, run_result)
                 emit("run_failed", {"error": action_result.error})
-                emit("evaluation_completed", {"passed": eval_result.passed})
+                emit("evaluation_completed", {
+                    "passed": eval_result.passed,
+                    "score": eval_result.score,
+                    "reasons": eval_result.reasons,
+                    "metrics": eval_result.metrics,
+                })
                 self._state_store.delete(run_id)
                 return EngineOutcome(run_id=run_id, run_result=run_result, eval_result=eval_result)
 
@@ -188,16 +193,21 @@ class HarnessEngine:
                 step_status = apply_step_event(step_status, "decision_complete")
                 emit("step_completed", {"step_id": step_id}, step_id=step_id)
                 run_status = apply_run_event(run_status, "run_succeeded")
-                emit("run_completed", {"status": run_status})
                 run_result = RunResult(
                     run_id=run_id,
                     task_type=task_spec.task_type,
                     status="completed",
                     output=decision.final_result,
                 )
+                emit("run_completed", {"status": run_status, "output": decision.final_result})
                 trace = read_trace_events(self.trace_root / f"{run_id}.jsonl")
                 eval_result = self.evaluator.evaluate(task_spec, trace, run_result)
-                emit("evaluation_completed", {"passed": eval_result.passed})
+                emit("evaluation_completed", {
+                    "passed": eval_result.passed,
+                    "score": eval_result.score,
+                    "reasons": eval_result.reasons,
+                    "metrics": eval_result.metrics,
+                })
                 self._state_store.delete(run_id)
                 return EngineOutcome(run_id=run_id, run_result=run_result, eval_result=eval_result)
 
@@ -214,7 +224,12 @@ class HarnessEngine:
                 )
                 trace = read_trace_events(self.trace_root / f"{run_id}.jsonl")
                 eval_result = self.evaluator.evaluate(task_spec, trace, run_result)
-                emit("evaluation_completed", {"passed": eval_result.passed})
+                emit("evaluation_completed", {
+                    "passed": eval_result.passed,
+                    "score": eval_result.score,
+                    "reasons": eval_result.reasons,
+                    "metrics": eval_result.metrics,
+                })
                 self._state_store.delete(run_id)
                 return EngineOutcome(run_id=run_id, run_result=run_result, eval_result=eval_result)
 

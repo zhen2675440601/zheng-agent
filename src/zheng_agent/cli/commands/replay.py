@@ -3,7 +3,13 @@ from pathlib import Path
 import tempfile
 import json
 
-from zheng_agent.core.replay.replayer import replay_trace, get_trace_events, reevaluate_trace
+from zheng_agent.core.replay.replayer import (
+    replay_trace,
+    get_trace_events,
+    reevaluate_trace,
+    get_original_eval_result,
+    compare_eval_results,
+)
 from zheng_agent.core.evaluation.validators import BasicRunEvaluator
 from zheng_agent.cli.config.loader import load_task_spec
 
@@ -19,11 +25,14 @@ from zheng_agent.cli.config.loader import load_task_spec
               help="Output format")
 @click.option("--re-evaluate", is_flag=True,
               help="Re-run evaluation on the trace")
-def replay(run_id: str, trace_dir: str, task_spec: str, format: str, re_evaluate: bool):
+@click.option("--compare", is_flag=True,
+              help="Compare original and re-evaluated results")
+def replay(run_id: str, trace_dir: str, task_spec: str, format: str, re_evaluate: bool, compare: bool):
     """Replay and analyze a historical run trace.
 
     Provides summary of the run, or detailed event list.
     With --task-spec and --re-evaluate, can re-run the evaluator.
+    With --compare, shows original vs re-evaluated result comparison.
     """
     if trace_dir:
         trace_root = Path(trace_dir)
@@ -56,6 +65,17 @@ def replay(run_id: str, trace_dir: str, task_spec: str, format: str, re_evaluate
     click.echo(f"Terminal event: {summary['terminal_event']}")
     click.echo(f"Step IDs: {', '.join(summary['step_ids']) or 'none'}")
 
+    # Show original evaluation result if available
+    original_eval = get_original_eval_result(trace_path)
+    if original_eval:
+        click.echo("-" * 40)
+        click.echo("Original evaluation:")
+        click.echo(f"Passed: {original_eval['passed']}")
+        if original_eval.get('score'):
+            click.echo(f"Score: {original_eval['score']}")
+        if original_eval.get('reasons'):
+            click.echo(f"Reasons: {', '.join(original_eval['reasons'])}")
+
     # Re-evaluate if requested
     if re_evaluate and task_spec:
         spec = load_task_spec(Path(task_spec))
@@ -81,3 +101,14 @@ def replay(run_id: str, trace_dir: str, task_spec: str, format: str, re_evaluate
             click.echo(f"Reasons: {', '.join(result['reasons'])}")
         if result['metrics']:
             click.echo(f"Metrics: {json.dumps(result['metrics'])}")
+
+        # Compare if requested
+        if compare and original_eval:
+            comparison = compare_eval_results(original_eval, result)
+            click.echo("-" * 40)
+            click.echo("Comparison:")
+            click.echo(f"Passed match: {comparison['passed_match']}")
+            click.echo(f"Score match: {comparison['score_match']}")
+            click.echo(f"Reasons match: {comparison['reasons_match']}")
+            if not comparison['passed_match']:
+                click.echo("WARNING: Evaluation results differ!")

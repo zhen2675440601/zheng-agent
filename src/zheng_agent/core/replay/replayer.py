@@ -81,3 +81,31 @@ def reevaluate_trace(
         "reasons": eval_result.reasons,
         "metrics": eval_result.metrics,
     }
+
+
+def get_original_eval_result(path: Path) -> dict | None:
+    """Extract the original evaluation result from a trace.
+
+    Returns the evaluation_completed event payload if found.
+    """
+    events = read_trace_events(path)
+    for event in events:
+        if event.event_type == "evaluation_completed":
+            return {
+                "passed": event.payload.get("passed"),
+                "score": event.payload.get("score"),
+                "reasons": event.payload.get("reasons", []),
+                "metrics": event.payload.get("metrics", {}),
+            }
+    return None
+
+
+def compare_eval_results(original: dict, reevaluated: dict) -> dict:
+    """Compare original and re-evaluated results for consistency."""
+    return {
+        "passed_match": original.get("passed") == reevaluated.get("passed"),
+        "score_match": original.get("score") == reevaluated.get("score"),
+        "reasons_match": original.get("reasons") == reevaluated.get("reasons"),
+        "original": original,
+        "reevaluated": reevaluated,
+    }
