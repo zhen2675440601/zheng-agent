@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 class RunResult(BaseModel):
     run_id: str
     task_type: str
-    status: Literal["completed", "failed"]
+    status: Literal["completed", "failed", "paused"]
     output: dict | None = None
     error: str | None = None
 
