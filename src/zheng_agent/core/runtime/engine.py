@@ -4,8 +4,8 @@ from uuid import uuid4
 
 from zheng_agent.core.action_gateway import ActionGatewayExecutor
 from zheng_agent.core.agent.base import AgentProtocol
-from zheng_agent.core.agent.mock import ScriptedMockAgent
 from zheng_agent.core.contracts import ActionRequest, RunContext, RunResult, TaskSpec
+from zheng_agent.core.contracts.recovery import AgentRecoveryMetadata
 from zheng_agent.core.evaluation.base import RunEvaluator
 from zheng_agent.core.runtime.state_store import RunState, RunStateStore
 from zheng_agent.core.state_machine import apply_run_event, apply_step_event
@@ -27,9 +27,57 @@ class HarnessEngine:
         self._pause_requested = False
         self._state_store = RunStateStore(trace_root)
 
+    def _pause_signal_path(self, run_id: str) -> Path:
+        """Get path to pause signal file for a run."""
+        return self.trace_root / f"{run_id}.pause_signal"
+
+    def _check_pause_signal(self, run_id: str) -> bool:
+        """Check if pause signal file exists for cross-process pause."""
+        return self._pause_signal_path(run_id).exists()
+
+    def _clear_pause_signal(self, run_id: str) -> None:
+        """Clear pause signal file after processing."""
+        signal_path = self._pause_signal_path(run_id)
+        if signal_path.exists():
+            signal_path.unlink()
+
+    def _save_checkpoint(
+        self,
+        run_id: str,
+        run_status: str,
+        step_id: str | None,
+        step_status: str,
+        step_index: int,
+        sequence: int,
+        task_spec: TaskSpec,
+        task_input: dict,
+        agent: AgentProtocol,
+        checkpoint_kind: str,
+        checkpoint_reason: str | None = None,
+    ) -> None:
+        """Save a checkpoint at key execution boundaries."""
+        state = RunState(
+            run_id=run_id,
+            run_status=run_status,
+            step_id=step_id,
+            step_status=step_status,
+            step_index=step_index,
+            sequence=sequence,
+            task_spec=task_spec,
+            task_input=task_input,
+            agent_recovery=agent.get_recovery_metadata(),
+            checkpoint_kind=checkpoint_kind,
+            checkpoint_reason=checkpoint_reason,
+        )
+        self._state_store.save(state)
+
     def request_pause(self) -> None:
-        """Signal the engine to pause at the next checkpoint."""
+        """Signal the engine to pause at the next checkpoint (in-process)."""
         self._pause_requested = True
+
+    def request_pause_external(self, run_id: str) -> None:
+        """Create pause signal file for cross-process pause request."""
+        self._pause_signal_path(run_id).write_text("pause", encoding="utf-8")
 
     def run(
         self,
@@ -51,16 +99,16 @@ class HarnessEngine:
             step_status = initial_state.step_status
             sequence = initial_state.sequence
             step_id = initial_state.step_id
-            agent_decisions_index = initial_state.agent_decisions_index
-            # Restore agent position for ScriptedMockAgent
-            if isinstance(agent, ScriptedMockAgent):
-                agent._index = agent_decisions_index
+            step_index = initial_state.step_index
+            # Restore agent position using recovery protocol
+            if initial_state.agent_recovery:
+                agent.restore_from_metadata(initial_state.agent_recovery)
         else:
             run_status = "created"
             step_status = "pending"
             sequence = 0
             step_id = None
-            agent_decisions_index = 0
+            step_index = 0
 
         def emit(event_type: str, payload: dict, step_id: str | None = None):
             nonlocal sequence
@@ -86,6 +134,7 @@ class HarnessEngine:
             emit("run_started", {})
 
         if run_status == "paused":
+            self._clear_pause_signal(run_id)
             run_status = apply_run_event(run_status, "resume_requested")
             emit("run_resumed", {})
 
@@ -96,6 +145,11 @@ class HarnessEngine:
             emit("step_scheduled", {"step_id": step_id}, step_id=step_id)
             step_status = apply_step_event(step_status, "step_started")
             emit("step_started", {"step_id": step_id}, step_id=step_id)
+            # Save checkpoint at step start
+            self._save_checkpoint(
+                run_id, run_status, step_id, step_status, step_index, sequence,
+                task_spec, task_input, agent, "step_boundary", "step_started"
+            )
 
         run_context = RunContext(run_id=run_id, task_spec=task_spec, task_input=task_input)
         run_context.visible_trace = [
@@ -104,21 +158,16 @@ class HarnessEngine:
         ]
 
         while True:
-            # Check for pause request
-            if self._pause_requested:
+            # Check for pause request (in-process or cross-process)
+            if self._pause_requested or self._check_pause_signal(run_id):
+                self._pause_requested = False
+                self._clear_pause_signal(run_id)  # Clear signal file after detecting
                 run_status = apply_run_event(run_status, "pause_requested")
-                emit("run_paused", {"step_id": step_id})
-                state = RunState(
-                    run_id=run_id,
-                    run_status=run_status,
-                    step_id=step_id,
-                    step_status=step_status,
-                    sequence=sequence,
-                    task_spec=task_spec,
-                    task_input=task_input,
-                    agent_decisions_index=agent_decisions_index if isinstance(agent, ScriptedMockAgent) else 0,
+                emit("run_paused", {"step_id": step_id, "checkpoint_kind": "pause"})
+                self._save_checkpoint(
+                    run_id, run_status, step_id, step_status, step_index, sequence,
+                    task_spec, task_input, agent, "pause", "user_requested"
                 )
-                self._state_store.save(state)
                 run_result = RunResult(
                     run_id=run_id,
                     task_type=task_spec.task_type,
@@ -127,7 +176,6 @@ class HarnessEngine:
                 return EngineOutcome(run_id=run_id, run_result=run_result, eval_result=None)
 
             decision = agent.decide(task_spec, run_context)
-            agent_decisions_index += 1
             emit(
                 "agent_decision_produced",
                 {"decision_type": decision.decision_type},
@@ -138,6 +186,12 @@ class HarnessEngine:
                 step_status = apply_step_event(step_status, "decision_request_action")
                 run_status = apply_run_event(run_status, "action_requested")
                 emit("action_requested", {"action_name": decision.action_name}, step_id=step_id)
+
+                # Save checkpoint before action
+                self._save_checkpoint(
+                    run_id, run_status, step_id, step_status, step_index, sequence,
+                    task_spec, task_input, agent, "action_before", f"action:{decision.action_name}"
+                )
 
                 request = ActionRequest(
                     run_id=run_id,
@@ -153,6 +207,11 @@ class HarnessEngine:
                     emit("action_executed", {"output": action_result.output}, step_id=step_id)
                     step_status = apply_step_event(step_status, "action_completed")
                     run_status = apply_run_event(run_status, "action_completed")
+                    # Save checkpoint after successful action
+                    self._save_checkpoint(
+                        run_id, run_status, step_id, step_status, step_index, sequence,
+                        task_spec, task_input, agent, "action_after", f"action:{decision.action_name}"
+                    )
                     run_context.visible_trace = [
                         event.model_dump(mode="json")
                         for event in read_trace_events(self.trace_root / f"{run_id}.jsonl")
@@ -241,7 +300,6 @@ class HarnessEngine:
         if state.run_status != "paused":
             raise ValueError(f"Run {run_id} is not paused (status: {state.run_status})")
 
-        self._pause_requested = False  # Reset pause flag before resuming
         return self.run(
             task_spec=state.task_spec,
             task_input=state.task_input,
