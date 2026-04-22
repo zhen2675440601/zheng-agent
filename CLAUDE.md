@@ -4,19 +4,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repository status
 
-**v0.3 已完成**。v0.4 正在推进 runtime guardrails 与 CLI 生命周期收口。
+**v0.5 已完成**。provider-grade parity + release hardening。
 
 已完成模块：
-- contracts (TaskSpec, AgentDecision, ActionRequest/Result, RunResult, EvalResult, recovery metadata)
+- contracts (TaskSpec, AgentDecision, ActionRequest/Result, RunResult, EvalResult, recovery metadata + RecoveryError)
 - state_machine (Run/Step 状态迁移表)
-- runtime/engine (HarnessEngine 执行引擎 + multi-step + checkpoint)
+- runtime/engine (HarnessEngine 执行引擎 + multi-step + checkpoint + guardrails)
 - runtime/state_store (RunState versioned checkpoint snapshot)
 - action_gateway (executor, registry, policy, bootstrap catalog)
 - tracing (JsonlTraceStore, events, typed payloads)
-- evaluation (BasicRunEvaluator)
+- evaluation (BasicRunEvaluator with status-aware failure detection)
 - replay (replayer + reconstruct_run_from_trace + compare + provenance)
-- agent (base protocol with recovery, mock agent, OpenAI adapter, ChatAgent)
-- CLI (run, chat, pause, resume, replay 命令)
+- agent (base protocol with recovery, mock agent, OpenAI adapter with test boundary, ChatAgent)
+- CLI (run, chat, pause, resume, replay 命令 + unified bootstrap)
 
 设计文档在 `docs/specs/`，v0.3 实施计划见 `docs/specs/agent-harness-v0.3-runtime-evolution-plan.md`。
 
@@ -48,13 +48,20 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Action bootstrap**: 统一的 ActionCatalog 和 create_registry_for_task()
 - **Enhanced replay**: reconstruct_run_from_trace()、provenance tracking、step ordering preservation
 
-## v0.4 当前进展
+## v0.4 新增能力（已完成）
 
 - **Runtime guardrails**: `max_steps` / `timeout_seconds` 已在 engine 中强制执行
 - **Decision contract**: LLM parser / prompt 已支持 `advance_step`、`respond` 等完整决策类型
 - **Lifecycle-true resume**: mock resume 基于 checkpoint 中序列化决策恢复，resume 不再走简化 complete fallback
-- **CLI bootstrap**: `run` / `chat` 已开始复用共享 runtime bootstrap；CLI version 改为从包版本导出（`0.4.0`）
-- **Testing**: 已补 runtime / parser / CLI 基础验证，下一步重点是更完整的生命周期 E2E
+- **CLI bootstrap**: `run` / `chat` / `resume` 已复用共享 runtime bootstrap；CLI version 改为从包版本导出
+- **Testing**: runtime / parser / CLI 基础验证已补齐
+
+## v0.5 新增能力（已完成）
+
+- **Recovery contract hardening**: `AgentRecoveryMetadata.validate_for_restore()` 校验必需字段，`RecoveryError` 统一恢复失败处理
+- **OpenAI test boundary**: `OpenAIAgent.set_client_for_testing()` 支持无网络测试
+- **Provider parity tests**: mock/openai 恢复矩阵测试覆盖 checkpoint kinds、trace 连续性、恢复验证
+- **Release hygiene**: 版本号统一为 `0.5.0`（CLI、pyproject、包导出），README/CLAUDE 同步
 
 
 Project Claude hooks are defined in `.claude/settings.json`.

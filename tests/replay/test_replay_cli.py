@@ -38,8 +38,8 @@ def test_get_trace_events_returns_all_events(tmp_path: Path):
 def test_reevaluate_trace_with_task_spec(tmp_path: Path):
     path = tmp_path / "run-3.jsonl"
     store = JsonlTraceStore(path)
-    store.append(build_trace_event(run_id="run-3", step_id=None, event_type="run_created", payload={}, sequence_number=1))
-    store.append(build_trace_event(run_id="run-3", step_id=None, event_type="run_completed", payload={"output": {"message": "hello"}}, sequence_number=2))
+    store.append(build_trace_event(run_id="run-3", step_id=None, event_type="run_created", payload={"task_type": "demo"}, sequence_number=1))
+    store.append(build_trace_event(run_id="run-3", step_id=None, event_type="run_completed", payload={"status": "completed", "output": {"message": "hello"}}, sequence_number=2))
 
     spec = TaskSpec(
         task_type="demo",
@@ -60,8 +60,8 @@ def test_reevaluate_trace_with_task_spec(tmp_path: Path):
 def test_reevaluate_trace_detects_missing_output(tmp_path: Path):
     path = tmp_path / "run-4.jsonl"
     store = JsonlTraceStore(path)
-    store.append(build_trace_event(run_id="run-4", step_id=None, event_type="run_created", payload={}, sequence_number=1))
-    store.append(build_trace_event(run_id="run-4", step_id=None, event_type="run_completed", payload={"output": {}}, sequence_number=2))
+    store.append(build_trace_event(run_id="run-4", step_id=None, event_type="run_created", payload={"task_type": "demo"}, sequence_number=1))
+    store.append(build_trace_event(run_id="run-4", step_id=None, event_type="run_completed", payload={"status": "completed", "output": {}}, sequence_number=2))
 
     spec = TaskSpec(
         task_type="demo",

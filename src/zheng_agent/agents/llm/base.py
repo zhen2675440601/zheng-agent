@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 
 from zheng_agent.core.agent.base import AgentProtocol
 from zheng_agent.core.contracts import AgentDecision, RunContext, TaskSpec
-from zheng_agent.core.contracts.recovery import AgentRecoveryMetadata
+from zheng_agent.core.contracts.recovery import AgentRecoveryMetadata, RecoveryError
 
 
 class BaseLLMAgent(AgentProtocol, ABC):
@@ -10,9 +10,15 @@ class BaseLLMAgent(AgentProtocol, ABC):
         self.model = model
         self.temperature = temperature
         self._message_history: list[dict] = []
+        self._last_prompt_context: dict = {}
 
     def decide(self, task_spec: TaskSpec, run_context: RunContext) -> AgentDecision:
         prompt = self._build_prompt(task_spec, run_context)
+        self._last_prompt_context = {
+            "task_type": task_spec.task_type,
+            "step_index": run_context.step_index,
+            "action_count": run_context.action_count,
+        }
         raw_response = self._call_llm(prompt)
         self._message_history.append({"role": "assistant", "content": raw_response})
         return self._parse_response(raw_response, task_spec)
@@ -39,9 +45,15 @@ class BaseLLMAgent(AgentProtocol, ABC):
                 "model": self.model,
                 "temperature": self.temperature,
                 "message_history": self._message_history,
+                "last_prompt_context": self._last_prompt_context,
             },
         )
 
     def restore_from_metadata(self, metadata: AgentRecoveryMetadata) -> None:
-        if metadata.agent_type == "openai":
-            self._message_history = metadata.recovery_data.get("message_history", [])
+        if metadata.agent_type != "openai":
+            raise RecoveryError("openai", f"metadata agent_type mismatch: got {metadata.agent_type}")
+        metadata.validate_for_restore()
+        self.model = metadata.recovery_data.get("model", self.model)
+        self.temperature = metadata.recovery_data.get("temperature", self.temperature)
+        self._message_history = metadata.recovery_data.get("message_history", [])
+        self._last_prompt_context = metadata.recovery_data.get("last_prompt_context", {})

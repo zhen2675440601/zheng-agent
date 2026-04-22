@@ -179,7 +179,7 @@ def test_cli_version_matches_package():
     code, out, err = run_cli(["--version"], Path.cwd())
 
     assert code == 0
-    assert "0.4.0" in out
+    assert "0.5.0" in out
 
 
 

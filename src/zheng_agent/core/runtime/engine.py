@@ -141,7 +141,8 @@ class HarnessEngine:
                     step_id=step_id,
                 )
                 step_status = "failed"
-            run_status = apply_run_event(run_status, "run_failed")
+            if run_status != "failed":
+                run_status = apply_run_event(run_status, "run_failed")
             emit("run_failed", {"error": error, "step_id": step_id})
             run_result = RunResult(
                 run_id=run_id,
@@ -337,12 +338,14 @@ class HarnessEngine:
 
                 if action_result.status == "rejected":
                     emit("action_rejected", {"error": action_result.error}, step_id=step_id)
-                    step_status = apply_step_event(step_status, "action_rejected")
+                    emit("step_failed", {"step_id": step_id, "step_index": step_index, "reason": "action_rejected"}, step_id=step_id)
+                    step_status = "failed"
                     run_status = apply_run_event(run_status, "action_rejected")
                     return fail_run(action_result.error or "action rejected", reason="action_rejected", include_step_failure=False)
 
                 emit("action_failed", {"error": action_result.error}, step_id=step_id)
-                step_status = apply_step_event(step_status, "action_failed")
+                emit("step_failed", {"step_id": step_id, "step_index": step_index, "reason": "action_failed"}, step_id=step_id)
+                step_status = "failed"
                 run_status = apply_run_event(run_status, "action_failed")
                 return fail_run(action_result.error or "action failed", reason="action_failed", include_step_failure=False)
 

@@ -19,7 +19,8 @@ Harness-first agent execution system.
 ## 状态
 
 - **v0.3**: 运行时进化完成 (checkpoint, typed payloads, multi-step, action bootstrap, enhanced replay)
-- **v0.4**: guardrails 与 CLI 生命周期收口中 (max_steps/timeout enforcement, decision contract alignment, lifecycle-true resume/bootstrap)
+- **v0.4**: guardrails 与 CLI 生命周期收口 (max_steps/timeout enforcement, decision contract, lifecycle-true resume, CLI bootstrap)
+- **v0.5**: provider-grade parity 完成 (recovery contract, OpenAI test boundary, provider parity tests, release hygiene)
 
 ```bash
 pip install -e .[dev]
@@ -101,12 +102,13 @@ py -m zheng_agent.cli.main pause <run_id> -d ./traces
 py -m zheng_agent.cli.main resume <run_id> -d ./traces
 ```
 
-### v0.4 guardrails
+### v0.5 provider parity
 
-- `TaskSpec.max_steps` 现在由 runtime 强制执行
-- `TaskSpec.timeout_seconds` 在 fresh run 和 resumed run 中都会生效
-- `resume` 优先使用 checkpoint 中的 agent recovery metadata 继续执行，而不是走简化完成路径
-- CLI 版本号与包版本统一，当前为 `0.4.0`
+- Mock/OpenAI recovery metadata 现在都包含完整的恢复字段
+- `AgentRecoveryMetadata.validate_for_restore()` 会校验必需字段
+- OpenAI 适配层支持 `set_client_for_testing()` 以便无网络测试
+- CLI `resume` 会在恢复前校验 checkpoint 的完整性
+- 版本号统一为 `0.5.0`（CLI、pyproject、包导出）
 
 ## 配置文件格式
 
@@ -182,6 +184,9 @@ py -m pytest tests/e2e/ -v
 
 - **v0.1**: 核心闭环完成 (contracts, state machine, engine, gateway, trace, eval)
 - **v0.2**: 工程化闭环完成 (pause/resume, replay CLI, 复验链路, E2E tests)
+- **v0.3**: 运行时进化完成 (checkpoint, typed payloads, multi-step, action bootstrap, enhanced replay)
+- **v0.4**: guardrails 与 CLI 生命周期收口 (max_steps/timeout enforcement, decision contract, lifecycle-true resume, CLI bootstrap)
+- **v0.5**: provider-grade parity 完成 (recovery contract, OpenAI test boundary, provider parity tests, release hygiene)
 
 ## License
 

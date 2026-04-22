@@ -1,6 +1,6 @@
 from zheng_agent.core.agent.base import AgentProtocol
 from zheng_agent.core.contracts import AgentDecision, RunContext, TaskSpec
-from zheng_agent.core.contracts.recovery import AgentRecoveryMetadata
+from zheng_agent.core.contracts.recovery import AgentRecoveryMetadata, RecoveryError
 
 
 class ScriptedMockAgent(AgentProtocol):
@@ -26,11 +26,13 @@ class ScriptedMockAgent(AgentProtocol):
         )
 
     def restore_from_metadata(self, metadata: AgentRecoveryMetadata) -> None:
-        if metadata.agent_type == "mock":
-            serialized_decisions = metadata.recovery_data.get("decisions")
-            if serialized_decisions:
-                self._decisions = [
-                    AgentDecision.model_validate(decision)
-                    for decision in serialized_decisions
-                ]
-            self._index = metadata.recovery_data.get("current_index", 0)
+        if metadata.agent_type != "mock":
+            raise RecoveryError("mock", f"metadata agent_type mismatch: got {metadata.agent_type}")
+        metadata.validate_for_restore()
+        serialized_decisions = metadata.recovery_data.get("decisions")
+        if serialized_decisions:
+            self._decisions = [
+                AgentDecision.model_validate(decision)
+                for decision in serialized_decisions
+            ]
+        self._index = metadata.recovery_data.get("current_index", 0)

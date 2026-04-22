@@ -20,6 +20,10 @@ class ReplayProvenance:
     reconstructed_from: str = "run_completed_event"
     trace_path: str = ""
     event_count: int = 0
+    typed_payload_count: int = 0
+    payload_validation_failures: int = 0
+    checkpoint_kind: str | None = None
+    agent_type: str | None = None
 
 
 @dataclass
@@ -51,14 +55,34 @@ def replay_trace(path: Path) -> dict:
 
     # Preserve step ordering by tracking first occurrence
     step_sequence: list[str] = []
+    typed_payload_count = 0
+    payload_validation_failures = 0
+    checkpoint_kind = None
+    agent_type = None
+
     for event in events:
         if event.step_id and event.step_id not in step_sequence:
             step_sequence.append(event.step_id)
+        if event.event_type in EVENT_PAYLOAD_TYPES:
+            if event.get_typed_payload() is not None:
+                typed_payload_count += 1
+            else:
+                payload_validation_failures += 1
+        if event.event_type == "run_paused" and event.get_typed_payload():
+            checkpoint_kind = event.get_typed_payload().checkpoint_kind
+        if event.event_type == "run_created" and event.get_typed_payload():
+            typed = event.get_typed_payload()
+            if hasattr(typed, 'agent_type'):
+                agent_type = typed.agent_type
 
     provenance = ReplayProvenance(
         trace_version="1.0",
         trace_path=str(path),
         event_count=len(events),
+        typed_payload_count=typed_payload_count,
+        payload_validation_failures=payload_validation_failures,
+        checkpoint_kind=checkpoint_kind,
+        agent_type=agent_type,
     )
 
     return {
@@ -151,6 +175,12 @@ def reevaluate_trace(
 
     run_id = events[0].run_id
 
+    # Count typed payload stats
+    typed_payload_count = sum(1 for e in events if e.event_type in EVENT_PAYLOAD_TYPES)
+    payload_validation_failures = sum(
+        1 for e in events if e.event_type in EVENT_PAYLOAD_TYPES and e.get_typed_payload() is None
+    )
+
     # Reconstruct from typed event if possible
     if final_output is None:
         for event in reversed(events):
@@ -178,6 +208,8 @@ def reevaluate_trace(
         reconstructed_from="run_completed_event",
         trace_path=str(path),
         event_count=len(events),
+        typed_payload_count=typed_payload_count,
+        payload_validation_failures=payload_validation_failures,
     )
 
     return {

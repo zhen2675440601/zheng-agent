@@ -6,30 +6,44 @@ import click
 
 from zheng_agent.core.action_gateway import ActionGatewayExecutor, create_registry_for_task
 from zheng_agent.core.agent.mock import ScriptedMockAgent
-from zheng_agent.core.contracts.recovery import AgentRecoveryMetadata
+from zheng_agent.core.contracts.recovery import AgentRecoveryMetadata, RecoveryError
 from zheng_agent.core.evaluation.validators import BasicRunEvaluator
 from zheng_agent.core.runtime.engine import HarnessEngine
 from zheng_agent.core.runtime.state_store import RunStateStore
 
 
 def _build_resume_agent(agent_type: str, recovery_data: dict | None):
+    """Construct agent from checkpoint recovery data with validation."""
+    if recovery_data is None:
+        recovery_data = {}
+
+    metadata = AgentRecoveryMetadata(agent_type=agent_type, recovery_data=recovery_data)
+
     if agent_type == "mock":
-        if not recovery_data or not recovery_data.get("decisions"):
-            raise click.ClickException("Mock checkpoint is missing serialized decisions for resume")
+        try:
+            metadata.validate_for_restore()
+        except RecoveryError as exc:
+            raise click.ClickException(f"Invalid checkpoint: {exc.reason}")
+
         agent = ScriptedMockAgent(decisions=[])
-        agent.restore_from_metadata(
-            AgentRecoveryMetadata(agent_type="mock", recovery_data=recovery_data)
-        )
+        agent.restore_from_metadata(metadata)
         return agent
 
     if agent_type == "openai":
+        try:
+            metadata.validate_for_restore()
+        except RecoveryError as exc:
+            raise click.ClickException(f"Invalid checkpoint: {exc.reason}")
+
         if not os.environ.get("OPENAI_API_KEY"):
             raise click.ClickException("OPENAI_API_KEY not set for openai agent")
         from zheng_agent.agents.llm.openai_agent import OpenAIAgent
 
-        model = recovery_data.get("model", "gpt-4o") if recovery_data else "gpt-4o"
-        temperature = recovery_data.get("temperature", 0.0) if recovery_data else 0.0
-        return OpenAIAgent(model=model, temperature=temperature)
+        model = recovery_data.get("model", "gpt-4o")
+        temperature = recovery_data.get("temperature", 0.0)
+        agent = OpenAIAgent(model=model, temperature=temperature)
+        agent.restore_from_metadata(metadata)
+        return agent
 
     raise click.ClickException(f"Unknown agent type: {agent_type}")
 

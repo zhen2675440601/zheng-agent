@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "zheng-agent"
-version = "0.1.0"
+version = "0.5.0"
 description = "Harness-first agent execution system"
 readme = "CLAUDE.md"
 requires-python = ">=3.12"
