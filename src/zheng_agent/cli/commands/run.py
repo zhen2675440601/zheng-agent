@@ -3,7 +3,7 @@ from pathlib import Path
 
 from zheng_agent.cli.config.loader import load_and_validate_task_input, load_task_spec, ValidationError
 from zheng_agent.core.runtime.engine import HarnessEngine
-from zheng_agent.core.action_gateway import ActionAdapterRegistry, ActionGatewayExecutor
+from zheng_agent.core.action_gateway import ActionGatewayExecutor, create_registry_for_task
 from zheng_agent.core.evaluation.validators import BasicRunEvaluator
 from zheng_agent.core.agent.mock import ScriptedMockAgent
 
@@ -31,14 +31,11 @@ def run(task_spec: str, task_input: str, agent: str, trace_dir: str, output_form
         click.echo(f"Error: {e}", err=True)
         raise SystemExit(1)
 
-    # 构建 action registry (内置 echo 动作)
-    registry = ActionAdapterRegistry()
-    registry.register("echo", lambda payload: {"echoed": payload.get("message", "")})
-    registry.register("log", lambda payload: {"logged": payload.get("message", "")})
+    # 使用统一的 action bootstrap 创建 registry
+    registry = create_registry_for_task(spec)
 
     # 创建 agent
     if agent == "mock":
-        # Mock agent: 先 echo 然后 complete
         from zheng_agent.core.contracts import AgentDecision
         agent_instance = ScriptedMockAgent(
             decisions=[

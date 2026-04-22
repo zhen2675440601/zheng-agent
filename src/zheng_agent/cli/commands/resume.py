@@ -5,7 +5,7 @@ import os
 
 from zheng_agent.core.runtime.engine import HarnessEngine
 from zheng_agent.core.runtime.state_store import RunStateStore
-from zheng_agent.core.action_gateway import ActionAdapterRegistry, ActionGatewayExecutor
+from zheng_agent.core.action_gateway import ActionGatewayExecutor, create_registry_for_task
 from zheng_agent.core.evaluation.validators import BasicRunEvaluator
 from zheng_agent.core.agent.mock import ScriptedMockAgent
 from zheng_agent.core.contracts import AgentDecision
@@ -44,13 +44,8 @@ def resume(run_id: str, agent: str, trace_dir: str):
     click.echo(f"Resuming from checkpoint: {state.checkpoint_kind}")
     click.echo(f"Step: {state.step_id} (index: {state.step_index})")
 
-    # Setup action registry from task spec
-    registry = ActionAdapterRegistry()
-    for action in state.task_spec.allowed_actions:
-        if action == "echo":
-            registry.register("echo", lambda payload: {"echoed": payload.get("message", "")})
-        elif action == "log":
-            registry.register("log", lambda payload: {"logged": payload.get("message", "")})
+    # 使用统一的 action bootstrap 创建 registry
+    registry = create_registry_for_task(state.task_spec)
 
     gateway = ActionGatewayExecutor(registry)
     evaluator = BasicRunEvaluator()
@@ -62,8 +57,6 @@ def resume(run_id: str, agent: str, trace_dir: str):
         agent_type = agent
 
     if agent_type == "mock":
-        # Create mock agent with remaining decisions
-        # Note: the agent's restore_from_metadata will set the correct position
         agent_instance = ScriptedMockAgent(
             decisions=[
                 AgentDecision(decision_type="complete", final_result=state.task_input),
