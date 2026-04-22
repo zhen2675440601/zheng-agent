@@ -33,7 +33,7 @@ class RunResumedPayload(BaseModel):
 
 
 class RunCompletedPayload(BaseModel):
-    status: str
+    status: str = "completed"
     output: dict | None = None
 
 
@@ -157,7 +157,11 @@ class TraceEvent(BaseModel):
     def get_typed_payload(self) -> TypedPayload | None:
         payload_cls = EVENT_PAYLOAD_TYPES.get(self.event_type)
         if payload_cls:
-            return payload_cls.model_validate(self.payload)
+            try:
+                return payload_cls.model_validate(self.payload)
+            except Exception:
+                # Return None if payload doesn't match schema
+                return None
         return None
 
 
