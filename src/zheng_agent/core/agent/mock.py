@@ -18,9 +18,19 @@ class ScriptedMockAgent(AgentProtocol):
     def get_recovery_metadata(self) -> AgentRecoveryMetadata:
         return AgentRecoveryMetadata(
             agent_type="mock",
-            recovery_data={"decisions_count": len(self._decisions), "current_index": self._index},
+            recovery_data={
+                "decisions": [decision.model_dump(mode="json") for decision in self._decisions],
+                "decisions_count": len(self._decisions),
+                "current_index": self._index,
+            },
         )
 
     def restore_from_metadata(self, metadata: AgentRecoveryMetadata) -> None:
         if metadata.agent_type == "mock":
+            serialized_decisions = metadata.recovery_data.get("decisions")
+            if serialized_decisions:
+                self._decisions = [
+                    AgentDecision.model_validate(decision)
+                    for decision in serialized_decisions
+                ]
             self._index = metadata.recovery_data.get("current_index", 0)

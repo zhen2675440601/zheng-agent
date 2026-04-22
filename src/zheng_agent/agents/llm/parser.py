@@ -12,7 +12,6 @@ class DecisionParseError(Exception):
 
 def parse_decision(raw_response: str, allowed_actions: list[str]) -> AgentDecision:
     """解析 LLM 响应为 AgentDecision"""
-    # 尝试提取 JSON 块（支持 markdown 代码块）
     json_match = re.search(r"\{[\s\S]*\}", raw_response)
     if not json_match:
         raise DecisionParseError("No JSON object found in response")
@@ -22,12 +21,11 @@ def parse_decision(raw_response: str, allowed_actions: list[str]) -> AgentDecisi
     except json.JSONDecodeError as e:
         raise DecisionParseError(f"Invalid JSON: {e}") from e
 
-    # 验证 decision_type
     decision_type = data.get("decision_type")
-    if decision_type not in ["request_action", "respond", "complete", "fail"]:
+    allowed_decision_types = {"request_action", "respond", "advance_step", "complete", "fail"}
+    if decision_type not in allowed_decision_types:
         raise DecisionParseError(f"Invalid decision_type: {decision_type}")
 
-    # 验证 action_name 是否允许
     if decision_type == "request_action":
         action_name = data.get("action_name")
         if action_name not in allowed_actions:

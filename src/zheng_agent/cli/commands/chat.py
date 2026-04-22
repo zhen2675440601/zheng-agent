@@ -1,20 +1,17 @@
+import os
+import tempfile
+from pathlib import Path
+
 import click
 
-from zheng_agent.core.runtime.engine import HarnessEngine
-from zheng_agent.core.action_gateway import ActionAdapterRegistry, ActionGatewayExecutor
-from zheng_agent.core.evaluation.validators import BasicRunEvaluator
-from zheng_agent.core.agent.mock import ScriptedMockAgent
-from zheng_agent.core.contracts import AgentDecision, TaskSpec
-from pathlib import Path
-import tempfile
-import os
+from zheng_agent.cli.runtime import build_engine, build_mock_chat_agent
+from zheng_agent.core.contracts import TaskSpec
 
 
 @click.command()
 @click.option("--mock", is_flag=True, help="Use mock agent for testing (no LLM calls)")
 @click.option("--model", default="gpt-4o", help="Model to use for LLM agent")
-@click.option("--trace-dir", "-d", default=None, type=click.Path(),
-              help="Directory to store trace files (default: temp)")
+@click.option("--trace-dir", "-d", default=None, type=click.Path(), help="Directory to store trace files (default: temp)")
 def chat(mock: bool, model: str, trace_dir: str):
     """Interactive chat with agent.
 
@@ -29,22 +26,12 @@ def chat(mock: bool, model: str, trace_dir: str):
     click.echo("Type your message and press Enter. Type 'exit' to quit.")
     click.echo("-" * 40)
 
-    # Setup
-    registry = ActionAdapterRegistry()
-    registry.register("echo", lambda payload: {"echoed": payload.get("message", "")})
-
-    gateway = ActionGatewayExecutor(registry)
-    evaluator = BasicRunEvaluator()
-
     if trace_dir:
         trace_root = Path(trace_dir)
         trace_root.mkdir(parents=True, exist_ok=True)
     else:
         trace_root = Path(tempfile.gettempdir()) / "zheng_traces"
 
-    engine = HarnessEngine(trace_root=trace_root, gateway=gateway, evaluator=evaluator)
-
-    # Chat task spec
     spec = TaskSpec(
         task_type="chat",
         title="Interactive Chat",
@@ -54,6 +41,7 @@ def chat(mock: bool, model: str, trace_dir: str):
         allowed_actions=["echo"],
         max_steps=3,
     )
+    engine = build_engine(spec, trace_root)
 
     while True:
         try:
@@ -72,23 +60,10 @@ def chat(mock: bool, model: str, trace_dir: str):
         input_data = {"message": message}
 
         if mock:
-            # Mock agent: echo back the message
-            agent = ScriptedMockAgent(
-                decisions=[
-                    AgentDecision(
-                        decision_type="request_action",
-                        action_name="echo",
-                        action_input={"message": message},
-                    ),
-                    AgentDecision(
-                        decision_type="complete",
-                        final_result={"response": f"[Mock] You said: {message}"},
-                    ),
-                ]
-            )
+            agent = build_mock_chat_agent(message)
         else:
-            # Real LLM agent
             from zheng_agent.agents.chat_agent import ChatAgent
+
             agent = ChatAgent(model=model)
 
         outcome = engine.run(task_spec=spec, task_input=input_data, agent=agent)

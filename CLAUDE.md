@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repository status
 
-**v0.3 已完成**。所有里程碑已实现并通过测试。
+**v0.3 已完成**。v0.4 正在推进 runtime guardrails 与 CLI 生命周期收口。
 
 已完成模块：
 - contracts (TaskSpec, AgentDecision, ActionRequest/Result, RunResult, EvalResult, recovery metadata)
@@ -48,7 +48,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Action bootstrap**: 统一的 ActionCatalog 和 create_registry_for_task()
 - **Enhanced replay**: reconstruct_run_from_trace()、provenance tracking、step ordering preservation
 
-## Repository rules and hooks
+## v0.4 当前进展
+
+- **Runtime guardrails**: `max_steps` / `timeout_seconds` 已在 engine 中强制执行
+- **Decision contract**: LLM parser / prompt 已支持 `advance_step`、`respond` 等完整决策类型
+- **Lifecycle-true resume**: mock resume 基于 checkpoint 中序列化决策恢复，resume 不再走简化 complete fallback
+- **CLI bootstrap**: `run` / `chat` 已开始复用共享 runtime bootstrap；CLI version 改为从包版本导出（`0.4.0`）
+- **Testing**: 已补 runtime / parser / CLI 基础验证，下一步重点是更完整的生命周期 E2E
+
 
 Project Claude hooks are defined in `.claude/settings.json`.
 

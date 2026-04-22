@@ -1,4 +1,6 @@
 import click
+
+from zheng_agent import __version__
 from zheng_agent.cli.commands.chat import chat
 from zheng_agent.cli.commands.pause import pause
 from zheng_agent.cli.commands.replay import replay
@@ -7,7 +9,7 @@ from zheng_agent.cli.commands.run import run
 
 
 @click.group()
-@click.version_option(version="0.1.0")
+@click.version_option(version=__version__)
 def cli():
     """zheng-agent: Harness-first agent execution system."""
     pass

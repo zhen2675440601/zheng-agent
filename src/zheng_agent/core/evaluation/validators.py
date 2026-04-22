@@ -13,6 +13,8 @@ class BasicRunEvaluator:
         rejected_actions = [event for event in trace if event.event_type == "action_rejected"]
 
         reasons: list[str] = []
+        if final_result.status != "completed":
+            reasons.append(f"run_status_{final_result.status}")
         if not output_valid:
             reasons.extend(output_errors)
         if rejected_actions:

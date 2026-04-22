@@ -1,7 +1,6 @@
 import pytest
 
 from zheng_agent.agents.llm.parser import DecisionParseError, parse_decision
-from zheng_agent.core.contracts import AgentDecision
 
 
 def test_parse_valid_request_action():
@@ -12,6 +11,23 @@ def test_parse_valid_request_action():
     assert decision.decision_type == "request_action"
     assert decision.action_name == "echo"
     assert decision.action_input == {"message": "hello"}
+
+
+def test_parse_valid_respond():
+    raw_response = '{"decision_type": "respond", "reasoning": "thinking", "response": {"message": "working"}}'
+
+    decision = parse_decision(raw_response, ["echo"])
+
+    assert decision.decision_type == "respond"
+    assert decision.response == {"message": "working"}
+
+
+def test_parse_valid_advance_step():
+    raw_response = '{"decision_type": "advance_step", "reasoning": "step is done"}'
+
+    decision = parse_decision(raw_response, ["echo"])
+
+    assert decision.decision_type == "advance_step"
 
 
 def test_parse_valid_complete():
@@ -50,6 +66,13 @@ def test_parse_invalid_action():
     raw_response = '{"decision_type": "request_action", "reasoning": "test", "action_name": "invalid", "action_input": {}}'
 
     with pytest.raises(DecisionParseError, match="not allowed"):
+        parse_decision(raw_response, ["echo"])
+
+
+def test_parse_missing_respond_payload():
+    raw_response = '{"decision_type": "respond", "reasoning": "thinking"}'
+
+    with pytest.raises(DecisionParseError, match="respond requires response"):
         parse_decision(raw_response, ["echo"])
 
 

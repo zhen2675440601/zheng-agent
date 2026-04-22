@@ -33,7 +33,6 @@ def test_pause_signal_file_is_detected_by_engine(tmp_path: Path):
     evaluator = BasicRunEvaluator()
     engine = HarnessEngine(trace_root=tmp_path, gateway=gateway, evaluator=evaluator)
 
-    # Agent that will echo multiple times before completing
     agent = ScriptedMockAgent(
         decisions=[
             AgentDecision(decision_type="request_action", action_name="echo", action_input={"message": "first"}),
@@ -42,7 +41,6 @@ def test_pause_signal_file_is_detected_by_engine(tmp_path: Path):
         ]
     )
 
-    # Create pause signal file before running
     signal_path = tmp_path / "test-run-1.pause_signal"
     signal_path.write_text("pause", encoding="utf-8")
 
@@ -53,13 +51,9 @@ def test_pause_signal_file_is_detected_by_engine(tmp_path: Path):
         run_id="test-run-1",
     )
 
-    # Engine should have paused at first checkpoint
     assert outcome.run_result.status == "paused"
-
-    # Signal file should be cleared after pause is processed
     assert not signal_path.exists()
 
-    # Checkpoint should be saved
     state_store = RunStateStore(tmp_path)
     state = state_store.load("test-run-1")
     assert state is not None
@@ -84,7 +78,6 @@ def test_external_pause_request_via_signal_file(tmp_path: Path):
     evaluator = BasicRunEvaluator()
     engine = HarnessEngine(trace_root=tmp_path, gateway=gateway, evaluator=evaluator)
 
-    # Agent that echoes before completing
     agent = ScriptedMockAgent(
         decisions=[
             AgentDecision(decision_type="request_action", action_name="echo", action_input={"message": "hello"}),
@@ -92,7 +85,6 @@ def test_external_pause_request_via_signal_file(tmp_path: Path):
         ]
     )
 
-    # Request pause externally (like CLI pause command)
     engine.request_pause_external("external-pause-run")
 
     outcome = engine.run(
@@ -129,7 +121,6 @@ def test_resume_from_checkpoint_restores_agent_position(tmp_path: Path):
     evaluator = BasicRunEvaluator()
     engine = HarnessEngine(trace_root=tmp_path, gateway=gateway, evaluator=evaluator)
 
-    # First agent that pauses after first echo
     agent1 = ScriptedMockAgent(
         decisions=[
             AgentDecision(decision_type="request_action", action_name="echo", action_input={"message": "first"}),
@@ -138,7 +129,6 @@ def test_resume_from_checkpoint_restores_agent_position(tmp_path: Path):
         ]
     )
 
-    # Request pause in-process
     engine.request_pause()
 
     outcome1 = engine.run(
@@ -150,24 +140,15 @@ def test_resume_from_checkpoint_restores_agent_position(tmp_path: Path):
 
     assert outcome1.run_result.status == "paused"
 
-    # Check agent recovery metadata was saved
     state_store = RunStateStore(tmp_path)
     state = state_store.load("restore-test-run")
     assert state is not None
     assert state.agent_recovery is not None
     assert state.agent_recovery.agent_type == "mock"
-    # Agent position is saved at checkpoint (may be 0 if paused before first decision)
     assert "current_index" in state.agent_recovery.recovery_data
+    assert "decisions" in state.agent_recovery.recovery_data
 
-    # Create new agent with same decisions for resume
-    agent2 = ScriptedMockAgent(
-        decisions=[
-            AgentDecision(decision_type="request_action", action_name="echo", action_input={"message": "first"}),
-            AgentDecision(decision_type="request_action", action_name="echo", action_input={"message": "second"}),
-            AgentDecision(decision_type="complete", final_result={"message": "done"}),
-        ]
-    )
-
+    agent2 = ScriptedMockAgent(decisions=[])
     outcome2 = engine.resume("restore-test-run", agent2)
 
     assert outcome2.run_result.status == "completed"
@@ -198,7 +179,6 @@ def test_checkpoint_saved_at_step_boundary(tmp_path: Path):
         ]
     )
 
-    # Request pause after engine starts
     engine.request_pause()
 
     outcome = engine.run(
@@ -209,7 +189,6 @@ def test_checkpoint_saved_at_step_boundary(tmp_path: Path):
     )
 
     state_store = RunStateStore(tmp_path)
-    # There should be checkpoints saved (at least at step_boundary)
     state = state_store.load("step-checkpoint-run")
     assert state is not None
 
@@ -239,19 +218,16 @@ def test_multiple_pause_resume_cycles(tmp_path: Path):
         AgentDecision(decision_type="complete", final_result={"message": "done"}),
     ]
 
-    # First pause
     agent1 = ScriptedMockAgent(decisions=decisions)
     engine.request_pause()
     outcome1 = engine.run(spec, {"message": "test"}, agent1, run_id="multi-pause-run")
     assert outcome1.run_result.status == "paused"
 
-    # Resume with new agent that will pause again
     agent2 = ScriptedMockAgent(decisions=decisions)
     engine.request_pause()
     outcome2 = engine.resume("multi-pause-run", agent2)
     assert outcome2.run_result.status == "paused"
 
-    # Final resume to complete
     agent3 = ScriptedMockAgent(decisions=decisions)
     outcome3 = engine.resume("multi-pause-run", agent3)
     assert outcome3.run_result.status == "completed"

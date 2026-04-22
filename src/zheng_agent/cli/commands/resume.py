@@ -1,30 +1,51 @@
-import click
-from pathlib import Path
-import tempfile
 import os
+import tempfile
+from pathlib import Path
 
+import click
+
+from zheng_agent.core.action_gateway import ActionGatewayExecutor, create_registry_for_task
+from zheng_agent.core.agent.mock import ScriptedMockAgent
+from zheng_agent.core.contracts.recovery import AgentRecoveryMetadata
+from zheng_agent.core.evaluation.validators import BasicRunEvaluator
 from zheng_agent.core.runtime.engine import HarnessEngine
 from zheng_agent.core.runtime.state_store import RunStateStore
-from zheng_agent.core.action_gateway import ActionGatewayExecutor, create_registry_for_task
-from zheng_agent.core.evaluation.validators import BasicRunEvaluator
-from zheng_agent.core.agent.mock import ScriptedMockAgent
-from zheng_agent.core.contracts import AgentDecision
-from zheng_agent.core.contracts.recovery import AgentType
+
+
+def _build_resume_agent(agent_type: str, recovery_data: dict | None):
+    if agent_type == "mock":
+        if not recovery_data or not recovery_data.get("decisions"):
+            raise click.ClickException("Mock checkpoint is missing serialized decisions for resume")
+        agent = ScriptedMockAgent(decisions=[])
+        agent.restore_from_metadata(
+            AgentRecoveryMetadata(agent_type="mock", recovery_data=recovery_data)
+        )
+        return agent
+
+    if agent_type == "openai":
+        if not os.environ.get("OPENAI_API_KEY"):
+            raise click.ClickException("OPENAI_API_KEY not set for openai agent")
+        from zheng_agent.agents.llm.openai_agent import OpenAIAgent
+
+        model = recovery_data.get("model", "gpt-4o") if recovery_data else "gpt-4o"
+        temperature = recovery_data.get("temperature", 0.0) if recovery_data else 0.0
+        return OpenAIAgent(model=model, temperature=temperature)
+
+    raise click.ClickException(f"Unknown agent type: {agent_type}")
 
 
 @click.command()
 @click.argument("run_id")
-@click.option("--agent", "-a", default="mock",
-              type=click.Choice(["mock", "openai"]),
-              help="Agent type to use for resuming")
-@click.option("--trace-dir", "-d", default=None, type=click.Path(),
-              help="Directory where traces are stored")
-def resume(run_id: str, agent: str, trace_dir: str):
-    """Resume a paused run from its last checkpoint.
-
-    Uses the persisted checkpoint to restore execution state and
-    continues from where the run was paused.
-    """
+@click.option(
+    "--agent",
+    "-a",
+    default=None,
+    type=click.Choice(["mock", "openai"]),
+    help="Override the checkpoint agent type for resuming",
+)
+@click.option("--trace-dir", "-d", default=None, type=click.Path(), help="Directory where traces are stored")
+def resume(run_id: str, agent: str | None, trace_dir: str):
+    """Resume a paused run from its last checkpoint."""
     if trace_dir:
         trace_root = Path(trace_dir)
     else:
@@ -44,37 +65,23 @@ def resume(run_id: str, agent: str, trace_dir: str):
     click.echo(f"Resuming from checkpoint: {state.checkpoint_kind}")
     click.echo(f"Step: {state.step_id} (index: {state.step_index})")
 
-    # 使用统一的 action bootstrap 创建 registry
     registry = create_registry_for_task(state.task_spec)
-
     gateway = ActionGatewayExecutor(registry)
     evaluator = BasicRunEvaluator()
     engine = HarnessEngine(trace_root=trace_root, gateway=gateway, evaluator=evaluator)
 
-    # Create agent based on checkpoint metadata or CLI override
-    agent_type: AgentType = state.agent_recovery.agent_type if state.agent_recovery else "mock"
-    if agent != "mock":
-        agent_type = agent
+    checkpoint_agent_type = state.agent_recovery.agent_type if state.agent_recovery else "mock"
+    recovery_data = state.agent_recovery.recovery_data if state.agent_recovery else {}
+    agent_type = agent or checkpoint_agent_type
 
-    if agent_type == "mock":
-        agent_instance = ScriptedMockAgent(
-            decisions=[
-                AgentDecision(decision_type="complete", final_result=state.task_input),
-            ]
-        )
-    elif agent_type == "openai":
-        if not os.environ.get("OPENAI_API_KEY"):
-            click.echo("Error: OPENAI_API_KEY not set for openai agent", err=True)
-            raise SystemExit(1)
-        from zheng_agent.agents.llm.openai_agent import OpenAIAgent
-        agent_instance = OpenAIAgent()
-    else:
-        click.echo(f"Error: Unknown agent type: {agent_type}", err=True)
+    try:
+        agent_instance = _build_resume_agent(agent_type, recovery_data)
+    except click.ClickException as exc:
+        click.echo(f"Error: {exc.message}", err=True)
         raise SystemExit(1)
 
     outcome = engine.resume(run_id, agent_instance)
 
-    # Output result
     click.echo(f"Run ID: {outcome.run_id}")
     click.echo(f"Status: {outcome.run_result.status}")
     if outcome.eval_result:

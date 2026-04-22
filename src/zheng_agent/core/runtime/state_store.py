@@ -21,6 +21,7 @@ class RunState(BaseModel):
 
     sequence: int
     last_event_id: str | None = None
+    started_at: str | None = None
 
     task_spec: TaskSpec
     task_input: dict
