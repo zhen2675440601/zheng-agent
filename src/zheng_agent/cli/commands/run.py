@@ -1,3 +1,4 @@
+import os
 import click
 from pathlib import Path
 
@@ -9,9 +10,10 @@ from zheng_agent.cli.runtime import build_engine, build_mock_run_agent
 @click.option("--task-spec", "-t", required=True, type=click.Path(exists=True), help="Path to task spec YAML file")
 @click.option("--task-input", "-i", required=True, type=click.Path(exists=True), help="Path to task input YAML/JSON file")
 @click.option("--agent", "-a", default="mock", type=click.Choice(["mock", "openai"]), help="Agent type to use")
+@click.option("--model", "-m", default=None, help="Model name for LLM agent (e.g., qwen-plus, gpt-4o)")
 @click.option("--trace-dir", "-d", default="./traces", type=click.Path(), help="Directory to store trace files")
 @click.option("--output-format", "-o", default="text", type=click.Choice(["text", "json"]), help="Output format")
-def run(task_spec: str, task_input: str, agent: str, trace_dir: str, output_format: str):
+def run(task_spec: str, task_input: str, agent: str, model: str | None, trace_dir: str, output_format: str):
     """Run a task with specified agent."""
     spec = load_task_spec(Path(task_spec))
     try:
@@ -25,7 +27,12 @@ def run(task_spec: str, task_input: str, agent: str, trace_dir: str, output_form
     else:
         from zheng_agent.agents.llm.openai_agent import OpenAIAgent
 
-        agent_instance = OpenAIAgent()
+        if not os.environ.get("OPENAI_API_KEY"):
+            click.echo("Error: OPENAI_API_KEY not set", err=True)
+            raise SystemExit(1)
+
+        model_name = model or os.environ.get("OPENAI_MODEL", "gpt-4o")
+        agent_instance = OpenAIAgent(model=model_name)
 
     engine = build_engine(spec, Path(trace_dir))
     outcome = engine.run(task_spec=spec, task_input=input_data, agent=agent_instance)

@@ -1,0 +1,6 @@
+sources:
+  - "source_a: 用户行为数据"
+  - "source_b: 系统性能数据"
+  - "source_c: 错误日志数据"
+  - "source_d: API 调用统计"
+analysis_type: "aggregate"

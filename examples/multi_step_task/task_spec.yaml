@@ -1,0 +1,32 @@
+task_type: data_collection
+title: 数据收集与分析任务
+description: 模拟一个真实场景：收集多个数据源的信息，进行分析并输出汇总报告
+input_schema:
+  type: object
+  properties:
+    sources:
+      type: array
+      items:
+        type: string
+      description: 需要收集的数据源列表
+    analysis_type:
+      type: string
+      description: 分析类型（summarize/compare/aggregate）
+  required:
+    - sources
+output_schema:
+  type: object
+  required_keys:
+    - report
+    - sources_processed
+allowed_actions:
+  - fetch_data
+  - analyze
+  - summarize
+constraints:
+  max_sources_per_step: 2
+success_criteria:
+  - 所有数据源都被处理
+  - 输出包含汇总报告
+max_steps: 5
+timeout_seconds: 60

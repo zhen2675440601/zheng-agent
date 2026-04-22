@@ -15,7 +15,23 @@ from zheng_agent.core.contracts import TaskSpec
 # Built-in action catalog
 BUILTIN_ACTIONS: dict[str, ActionAdapter] = {
     "echo": lambda payload: {"echoed": payload.get("message", "")},
-    "log": lambda payload: {"logged": payload.get("message", "")},
+    "log": lambda payload: {"logged": payload.get("message", ""), "timestamp": "2026-04-22"},
+    # Data collection scenario actions
+    "fetch_data": lambda payload: {
+        "source": payload.get("source", "unknown"),
+        "data": {"records": 100, "status": "ok"},
+        "fetched_at": "2026-04-22T10:00:00Z",
+    },
+    "analyze": lambda payload: {
+        "analysis_type": payload.get("analysis_type", "basic"),
+        "result": {"metrics": {"avg": 42, "max": 100, "min": 1}},
+        "analyzed_at": "2026-04-22T10:05:00Z",
+    },
+    "summarize": lambda payload: {
+        "summary": f"Processed {payload.get('source_count', 0)} sources",
+        "key_findings": ["Data quality: good", "Coverage: 95%"],
+        "summarized_at": "2026-04-22T10:10:00Z",
+    },
 }
 
 

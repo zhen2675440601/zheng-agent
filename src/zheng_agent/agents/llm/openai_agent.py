@@ -1,11 +1,20 @@
+import os
+
 from zheng_agent.agents.llm.base import BaseLLMAgent
 from zheng_agent.core.contracts import AgentDecision, RunContext, TaskSpec
 
 
 class OpenAIAgent(BaseLLMAgent):
-    def __init__(self, model: str = "gpt-4o", temperature: float = 0.0, api_key: str | None = None):
+    def __init__(
+        self,
+        model: str = "gpt-4o",
+        temperature: float = 0.0,
+        api_key: str | None = None,
+        base_url: str | None = None,
+    ):
         super().__init__(model, temperature)
-        self._api_key = api_key
+        self._api_key = api_key or os.environ.get("OPENAI_API_KEY")
+        self._base_url = base_url or os.environ.get("OPENAI_BASE_URL")
         self._client = None
 
     def _get_client(self):
@@ -15,7 +24,10 @@ class OpenAIAgent(BaseLLMAgent):
                 from openai import OpenAI
             except ImportError as e:
                 raise ImportError("openai package not installed. Run: pip install zheng-agent[openai]") from e
-            self._client = OpenAI(api_key=self._api_key)
+            self._client = OpenAI(
+                api_key=self._api_key,
+                base_url=self._base_url,
+            )
         return self._client
 
     def _call_llm(self, prompt: str) -> str:
