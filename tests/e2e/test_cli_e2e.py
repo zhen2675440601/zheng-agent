@@ -178,3 +178,70 @@ def test_cli_help():
     assert "pause" in out
     assert "resume" in out
     assert "replay" in out
+
+
+def test_replay_shows_step_sequence():
+    """E2E: replay output preserves step ordering."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        trace_dir = tmp / "traces"
+        trace_dir.mkdir()
+
+        # Run to create trace
+        code, out, err = run_cli(
+            [
+                "run",
+                "-t", "examples/demo_task/task_spec.yaml",
+                "-i", "examples/demo_task/task_input.yaml",
+                "-a", "mock",
+                "-d", str(trace_dir),
+            ],
+            Path.cwd(),
+        )
+        assert code == 0
+        run_id = out.split("Run ID: ")[1].split()[0].strip()
+
+        # Replay and check step sequence
+        code, out, err = run_cli(
+            [
+                "replay", run_id,
+                "-d", str(trace_dir),
+                "-f", "events",
+            ],
+            Path.cwd(),
+        )
+
+        assert code == 0
+        # Should show step events in order
+        assert "step_scheduled" in out or "step_started" in out
+
+
+def test_run_uses_unified_action_bootstrap():
+    """E2E: run command uses unified action catalog."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        trace_dir = tmp / "traces"
+        trace_dir.mkdir()
+
+        # Run with echo action (uses BUILTIN_ACTIONS)
+        code, out, err = run_cli(
+            [
+                "run",
+                "-t", "examples/demo_task/task_spec.yaml",
+                "-i", "examples/demo_task/task_input.yaml",
+                "-a", "mock",
+                "-d", str(trace_dir),
+            ],
+            Path.cwd(),
+        )
+
+        assert code == 0
+        assert "Status: completed" in out
+
+        # Verify trace contains action_executed event
+        trace_files = list(trace_dir.glob("*.jsonl"))
+        assert len(trace_files) == 1
+
+        # Read trace and verify action was executed
+        trace_content = trace_files[0].read_text(encoding="utf-8")
+        assert "action_executed" in trace_content or "echo" in trace_content

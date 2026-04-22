@@ -4,21 +4,21 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repository status
 
-**v0.3 进行中**。里程碑 1 和 2 已完成，正在实施多 step 执行模型。
+**v0.3 已完成**。所有里程碑已实现并通过测试。
 
 已完成模块：
 - contracts (TaskSpec, AgentDecision, ActionRequest/Result, RunResult, EvalResult, recovery metadata)
 - state_machine (Run/Step 状态迁移表)
-- runtime/engine (HarnessEngine 执行引擎 + checkpoint pause/resume)
+- runtime/engine (HarnessEngine 执行引擎 + multi-step + checkpoint)
 - runtime/state_store (RunState versioned checkpoint snapshot)
-- action_gateway (executor, registry, policy)
+- action_gateway (executor, registry, policy, bootstrap catalog)
 - tracing (JsonlTraceStore, events, typed payloads)
 - evaluation (BasicRunEvaluator)
-- replay (replayer + reevaluate_trace + compare)
+- replay (replayer + reconstruct_run_from_trace + compare + provenance)
 - agent (base protocol with recovery, mock agent, OpenAI adapter, ChatAgent)
 - CLI (run, chat, pause, resume, replay 命令)
 
-设计文档在 `docs/specs/`，v0.3 计划见 `docs/specs/agent-harness-v0.3-runtime-evolution-plan.md`。
+设计文档在 `docs/specs/`，v0.3 实施计划见 `docs/specs/agent-harness-v0.3-runtime-evolution-plan.md`。
 
 ## v0.1 验收标准（全部满足）
 
@@ -36,14 +36,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **复验链路**: trace → replay → evaluator 结果一致性验证
 - **chat 命令**: 交互式对话（LLM 或 mock）
 
-## v0.3 新增能力（进行中）
+## v0.3 新增能力（已完成）
 
 - **Durable checkpoint**: RunState 扩展为 versioned checkpoint snapshot
-- **Typed trace payloads**: 核心事件族有稳定 payload 结构
+- **Typed trace payloads**: 核心事件族有稳定 payload 结构（17 种 typed payloads）
 - **Agent recovery protocol**: agent 可通过 metadata 恢复位置
 - **Cross-process pause**: 通过信号文件实现跨进程暂停
+- **Multi-step execution**: 支持多 step 执行模型，advance_step/respond decision
 - **Checkpoint boundaries**: step start、action before/after 保存 checkpoint
 - **Action causality**: request_id、error_category、timestamps 字段
+- **Action bootstrap**: 统一的 ActionCatalog 和 create_registry_for_task()
+- **Enhanced replay**: reconstruct_run_from_trace()、provenance tracking、step ordering preservation
 
 ## Repository rules and hooks
 

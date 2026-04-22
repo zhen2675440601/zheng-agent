@@ -11,10 +11,16 @@ Harness-first agent execution system.
 - **Action Gateway**: Agent 不能绕过网关访问外部能力
 - **完整 Trace**: 每次 run 生成 append-only 执行事实流
 - **可评估**: 每次 run 可被 evaluator 判定
-- **Pause/Resume**: 运行中暂停、恢复执行
-- **Replay**: 从历史 trace 重放、复验
+- **Pause/Resume**: 运行中暂停、恢复执行（跨进程可靠）
+- **Replay**: 从历史 trace 重放、复验（结构化重建）
+- **Multi-step**: 支持多 step 执行模型
+- **Typed payloads**: 核心事件有稳定 payload 结构
 
-## 安装
+## 状态
+
+- **v0.1**: 核心闭环完成 (contracts, state machine, engine, gateway, trace, eval)
+- **v0.2**: 工程化闭环完成 (pause/resume, replay CLI, 复验链路, E2E tests)
+- **v0.3**: 运行时进化完成 (checkpoint, typed payloads, multi-step, action bootstrap, enhanced replay)
 
 ```bash
 pip install -e .[dev]

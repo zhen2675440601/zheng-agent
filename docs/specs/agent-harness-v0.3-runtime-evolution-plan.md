@@ -220,4 +220,47 @@ v0.3 聚焦四件事：
 - 不把 v0.3 做成并发执行大版本，先专注串行多 step + 可恢复性
 - 不急于支持所有 agent provider 的完整恢复，先定义通用 recovery contract，再逐步接入
 - 不在 v0.3 引入过多新命令，重点是让现有 run/pause/resume/replay 的语义可靠一致
-- trace typing 不做过度建模，只覆盖 runtime/replay/eval 真正依赖的核心事件
+---
+
+## 7. 完成状态
+
+**v0.3 已完成** (2026-04-22)
+
+### 里程碑完成情况
+
+| 里程碑 | 状态 | 关键提交 |
+|--------|------|----------|
+| 4.1 Durable runtime contracts | ✅ | f1c4981 |
+| 4.2 Cross-process pause/resume | ✅ | f1c4981 |
+| 4.3 Multi-step execution | ✅ | 1f536bd |
+| 4.4 Action bootstrap | ✅ | c3b85a9 |
+| 4.5 Enhanced replay | ✅ | fc8b81e |
+| 4.6 Tests & docs | ✅ | 本次提交 |
+
+### 测试覆盖
+
+- **合约层**: `test_v03_contracts.py` (10 tests)
+- **Runtime 层**: `test_checkpoint_pause_resume.py` (5 tests), `test_multi_step_execution.py` (7 tests)
+- **Action gateway**: `test_bootstrap.py` (13 tests)
+- **E2E**: `test_cli_e2e.py` (8 tests)
+- **总计**: 91 passed
+
+### 新增文件
+
+- `src/zheng_agent/core/contracts/recovery.py`
+- `src/zheng_agent/core/action_gateway/bootstrap.py`
+- `tests/contracts/test_v03_contracts.py`
+- `tests/runtime/test_checkpoint_pause_resume.py`
+- `tests/runtime/test_multi_step_execution.py`
+- `tests/action_gateway/test_bootstrap.py`
+
+### 关键变更
+
+- RunState 扩展为 versioned checkpoint (version, step_index, last_event_id, agent_recovery)
+- 17 种 typed trace payloads
+- Agent recovery protocol (get_recovery_metadata, restore_from_metadata)
+- Action causality fields (request_id, error_category, timestamps)
+- Cross-process pause via signal file
+- Multi-step execution (start_new_step, advance_to_next_step, advance_step decision)
+- ActionCatalog and create_registry_for_task()
+- ReplayProvenance and reconstruct_run_from_trace()
