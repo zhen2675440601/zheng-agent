@@ -17,10 +17,12 @@ def test_build_decision_prompt_includes_task_spec():
 
     prompt = build_decision_prompt(spec, context)
 
-    assert "demo" in prompt
+    # 新 prompt 显示 title 而非 task_type
     assert "Demo Task" in prompt
     assert "echo" in prompt
     assert "log" in prompt
+    # 显示允许动作列表
+    assert "允许动作" in prompt
 
 
 def test_build_decision_prompt_includes_task_input():

@@ -14,10 +14,13 @@ from zheng_agent.core.contracts import TaskSpec
 
 
 def test_builtin_actions_catalog_contains_echo_and_log():
-    """Builtin catalog contains echo and log actions."""
+    """Builtin catalog contains core actions."""
     assert "echo" in BUILTIN_ACTIONS
     assert "log" in BUILTIN_ACTIONS
-    assert len(BUILTIN_ACTIONS) == 2
+    # v0.5 添加了更多内置动作用于多步骤任务测试
+    assert "fetch_data" in BUILTIN_ACTIONS
+    assert "analyze" in BUILTIN_ACTIONS
+    assert "summarize" in BUILTIN_ACTIONS
 
 
 def test_catalog_register_adds_new_action():
