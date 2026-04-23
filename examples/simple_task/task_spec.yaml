@@ -1,0 +1,18 @@
+task_type: simple_echo
+title: 简单测试任务
+description: 最简单的任务，只执行一个 echo 动作
+input_schema:
+  type: object
+  properties:
+    message:
+      type: string
+  required:
+    - message
+output_schema:
+  type: object
+  required_keys:
+    - result
+allowed_actions:
+  - echo
+max_steps: 2
+timeout_seconds: 60

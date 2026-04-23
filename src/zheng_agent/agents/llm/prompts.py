@@ -2,51 +2,42 @@ import json
 
 from zheng_agent.core.contracts import RunContext, TaskSpec
 
-SYSTEM_PROMPT = """你是一个任务执行 Agent。你需要根据任务规格和当前状态做出决策。
+SYSTEM_PROMPT = """你是任务执行 Agent。根据任务规格执行并返回结果。
 
-可用决策类型：
-1. request_action - 请求执行一个动作
-2. respond - 返回中间响应，但不结束任务
-3. advance_step - 当前 step 已完成，推进到下一 step
-4. complete - 任务完成，返回结果
-5. fail - 任务失败，说明原因
+## 决策类型
 
-【重要】你只能使用任务规格中明确列出的"允许的动作"，不能使用其他动作！
+1. **request_action** - 调用允许的动作
+   {"decision_type": "request_action", "reasoning": "...", "action_name": "...", "action_input": {...}}
 
-你必须以 JSON 格式回复，格式如下：
-- request_action: {"decision_type": "request_action", "reasoning": "...", "action_name": "...", "action_input": {...}}
-- respond: {"decision_type": "respond", "reasoning": "...", "response": {...}}
-- advance_step: {"decision_type": "advance_step", "reasoning": "..."}
-- complete: {"decision_type": "complete", "reasoning": "...", "final_result": {...}}
-- fail: {"decision_type": "fail", "reasoning": "...", "failure_reason": "..."}
+2. **advance_step** - 当前 step 完成，进入下一 step
+   {"decision_type": "advance_step", "reasoning": "..."}
+
+3. **complete** - 任务完成，返回结果（立即结束）
+   {"decision_type": "complete", "reasoning": "...", "final_result": {...}}
+
+4. **fail** - 无法继续
+   {"decision_type": "fail", "reasoning": "...", "failure_reason": "..."}
+
+## 规则
+
+- 只用"允许的动作"
+- action_input 用真实数据
+- 结果准备好后立即 complete，不要再 advance_step
 """
 
 
 def build_decision_prompt(task_spec: TaskSpec, run_context: RunContext) -> str:
     """构造决策 prompt"""
-    allowed_actions_str = ", ".join(task_spec.allowed_actions)
+    allowed = ", ".join(task_spec.allowed_actions)
+    required = ", ".join(task_spec.output_schema.get("required_keys", [])) or "无"
 
-    task_info = f"""## 任务规格
-- 类型: {task_spec.task_type}
-- 标题: {task_spec.title}
-- 描述: {task_spec.description}
-- 输入 Schema: {json.dumps(task_spec.input_schema, ensure_ascii=False)}
-- 输出 Schema: {json.dumps(task_spec.output_schema, ensure_ascii=False)}
-- 【允许的动作】: {allowed_actions_str}  ← 你只能使用这些动作！
-- 约束: {json.dumps(task_spec.constraints, ensure_ascii=False)}
-- 成功标准: {json.dumps(task_spec.success_criteria, ensure_ascii=False)}
-- 最大步数: {task_spec.max_steps}"""
+    task = f"任务: {task_spec.title}\n动作: {allowed}\n输出: {required}"
+    ctx = f"Step: {run_context.step_index + 1}/{task_spec.max_steps}\n输入: {json.dumps(run_context.task_input, ensure_ascii=False)}"
 
-    context_info = f"""## 当前上下文
-- Run ID: {run_context.run_id}
-- 当前步数: {run_context.step_index}
-- 任务输入: {json.dumps(run_context.task_input, ensure_ascii=False)}"""
+    trace = ""
+    if run_context.visible_trace[-3:]:
+        trace = f"最近: {json.dumps(run_context.visible_trace[-3:], ensure_ascii=False)}"
 
-    trace_info = ""
-    if run_context.visible_trace:
-        # 只显示最近5条事件
-        recent_trace = run_context.visible_trace[-5:]
-        trace_info = f"""## 执行轨迹
-{json.dumps(recent_trace, ensure_ascii=False, indent=2)}"""
+    guide = f"决策: 继续→request_action | step完→advance_step | 结果好→complete(含:{required})"
 
-    return f"{SYSTEM_PROMPT}\n\n{task_info}\n\n{context_info}\n{trace_info}\n\n请做出决策（只能使用允许的动作）："""
+    return f"{SYSTEM_PROMPT}\n\n{task}\n{ctx}\n{trace}\n\n{guide}"

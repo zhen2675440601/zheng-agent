@@ -28,5 +28,5 @@ constraints:
 success_criteria:
   - 所有数据源都被处理
   - 输出包含汇总报告
-max_steps: 5
-timeout_seconds: 60
+max_steps: 8
+timeout_seconds: 300
