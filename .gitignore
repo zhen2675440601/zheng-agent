@@ -13,3 +13,6 @@ build/
 # Project specific
 traces/
 test_traces/
+
+# Environment variables (sensitive)
+.env

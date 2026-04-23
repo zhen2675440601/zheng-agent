@@ -1,4 +1,5 @@
 import click
+from dotenv import load_dotenv
 
 from zheng_agent import __version__
 from zheng_agent.cli.commands.chat import chat
@@ -12,6 +13,8 @@ from zheng_agent.cli.commands.run import run
 @click.version_option(version=__version__)
 def cli():
     """zheng-agent: Harness-first agent execution system."""
+    # Load environment variables from .env file (if exists)
+    load_dotenv()
     pass
 
 

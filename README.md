@@ -32,6 +32,29 @@ pip install -e .[dev]
 pip install -e .[dev,openai]
 ```
 
+## 环境配置
+
+复制 `.env.example` 为 `.env` 并填入你的配置：
+
+```bash
+cp .env.example .env
+```
+
+编辑 `.env` 文件：
+
+```bash
+# API Key for LLM provider
+OPENAI_API_KEY=sk-your-api-key-here
+
+# Base URL for OpenAI-compatible API (e.g., Alibaba 百炼)
+OPENAI_BASE_URL=https://coding.dashscope.aliyuncs.com/v1
+
+# Model name
+OPENAI_MODEL=glm-5
+```
+
+配置后 CLI 会自动加载 `.env` 中的环境变量，无需每次手动设置。
+
 ## 快速开始
 
 ```bash
